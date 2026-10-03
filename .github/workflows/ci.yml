@@ -1,0 +1,69 @@
+# Runs on every pull request into main and on every push to main.
+# Make both jobs required in Settings -> Rules (or Branches) so nothing merges while they fail.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Typecheck and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests and level checks (every level wins with its hint, none without a line)
+        run: npm test
+
+  build:
+    name: Build and SDK smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build the YouTube Playables bundle
+        run: npm run build
+      - name: Build the single-file preview
+        run: npm run build:preview
+      - name: Install Chromium for the smoke test
+        run: npx playwright install --with-deps chromium
+      - name: Run the build against a mock Playables SDK
+        run: npm run smoke
+      - name: Report bundle size
+        run: |
+          {
+            echo "### Bundle size"
+            echo '```'
+            du -b dist/assets/*.js dist-preview/index.html
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: draw-to-hole-builds
+          path: |
+            dist/
+            dist-preview/index.html
+          retention-days: 14
