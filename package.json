@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "par": "vite-node scripts/par.ts",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "perf": "node scripts/perf.mjs"
   },
   "dependencies": {
     "planck": "^1.5.0"

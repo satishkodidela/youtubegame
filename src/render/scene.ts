@@ -42,7 +42,13 @@ export interface SceneState {
   particles: Particle[];
   dropCue: boolean;
   lowInk: boolean;
+  /** The static layer (drawStatic) is already on the canvas, e.g. from a cached image. */
+  staticDrawn?: boolean;
 }
+
+const WATER = '#2f9be0';
+/** Depth below the water's rest line that the animated wave band covers. */
+const WAVE = 0.05;
 
 export function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number, theme: Theme, time: number): void {
   const g = ctx.createLinearGradient(0, 0, 0, h);
@@ -125,53 +131,29 @@ function topEdges(poly: Pt[]): [Pt, Pt][] {
   return out;
 }
 
-export function drawScene(ctx: CanvasRenderingContext2D, v: View, st: SceneState): void {
-  const { level, theme, time, sim } = st;
+/**
+ * Everything in a level that never moves: mover tracks, cups, flag poles, ground and greens.
+ * The game paints this once per level into a cached image; see drawScene's `staticDrawn`.
+ */
+export function drawStatic(ctx: CanvasRenderingContext2D, v: View, level: LevelDef, theme: Theme): void {
   const s = v.s;
   const X = (x: number) => v.ox + x * s;
   const Y = (y: number) => v.oy + y * s;
 
-  // Wind zones (behind everything).
+  // Wind zone panels (their moving streaks are drawn per frame).
+  ctx.fillStyle = 'rgba(255,255,255,0.22)';
   for (const it of level.items) {
     if (it.t !== 'wind') continue;
-    const x0 = X(it.x - it.w / 2);
-    const y0 = Y(it.y - it.h / 2);
-    const w = it.w * s;
-    const h = it.h * s;
-    ctx.fillStyle = 'rgba(255,255,255,0.22)';
-    roundRect(ctx, x0, y0, w, h, 0.25 * s);
+    roundRect(ctx, X(it.x - it.w / 2), Y(it.y - it.h / 2), it.w * s, it.h * s, 0.25 * s);
     ctx.fill();
-    ctx.save();
-    roundRect(ctx, x0, y0, w, h, 0.25 * s);
-    ctx.clip();
-    const mag = Math.hypot(it.fx, it.fy) || 1;
-    const dx = it.fx / mag;
-    const dy = it.fy / mag;
-    const along = Math.abs(dx) * it.w + Math.abs(dy) * it.h;
-    const across = Math.abs(dy) * it.w + Math.abs(dx) * it.h;
-    const n = Math.max(3, Math.round(across * 2.2));
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-    ctx.lineWidth = 0.06 * s;
-    ctx.lineCap = 'round';
-    for (let i = 0; i < n; i++) {
-      const off = (i + 0.5) / n - 0.5;
-      const phase = (i * 0.618) % 1;
-      const span = along + 1;
-      const u = ((phase * span + time * (1.5 + mag * 0.1)) % span) - span / 2;
-      const cx = it.x + dx * u - dy * off * across;
-      const cy = it.y + dy * u + dx * off * across;
-      ctx.beginPath();
-      ctx.moveTo(X(cx - dx * 0.45), Y(cy - dy * 0.45));
-      ctx.lineTo(X(cx), Y(cy));
-      ctx.stroke();
-      // arrow head
-      ctx.beginPath();
-      ctx.moveTo(X(cx - dx * 0.16 - dy * 0.1), Y(cy - dy * 0.16 + dx * 0.1));
-      ctx.lineTo(X(cx), Y(cy));
-      ctx.lineTo(X(cx - dx * 0.16 + dy * 0.1), Y(cy - dy * 0.16 - dx * 0.1));
-      ctx.stroke();
-    }
-    ctx.restore();
+  }
+
+  // Still water below the waves (the wavy surface band is drawn per frame).
+  ctx.fillStyle = WATER;
+  for (const it of level.items) {
+    if (it.t !== 'water') continue;
+    const top = it.y - it.h / 2 + WAVE;
+    ctx.fillRect(X(it.x - it.w / 2), Y(top), it.w * s, (it.h - WAVE) * s);
   }
 
   // Mover tracks.
@@ -199,50 +181,17 @@ export function drawScene(ctx: CanvasRenderingContext2D, v: View, st: SceneState
     }
   }
 
-  // Water body.
-  for (const it of level.items) {
-    if (it.t !== 'water') continue;
-    const top = it.y - it.h / 2;
-    ctx.fillStyle = '#2f9be0';
-    ctx.beginPath();
-    ctx.moveTo(X(it.x - it.w / 2), Y(it.y + it.h / 2));
-    for (let x = it.x - it.w / 2; x <= it.x + it.w / 2 + 1e-6; x += 0.1) {
-      ctx.lineTo(X(x), Y(top + Math.sin(x * 3 + time * 2.4) * 0.04));
-    }
-    ctx.lineTo(X(it.x + it.w / 2), Y(it.y + it.h / 2));
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-    ctx.lineWidth = 0.05 * s;
-    ctx.beginPath();
-    for (let x = it.x - it.w / 2; x <= it.x + it.w / 2 + 1e-6; x += 0.1) {
-      const y = Y(top + Math.sin(x * 3 + time * 2.4) * 0.04);
-      if (x === it.x - it.w / 2) ctx.moveTo(X(x), y);
-      else ctx.lineTo(X(x), y);
-    }
-    ctx.stroke();
-  }
-
-  // Cups and flags (behind the ball).
+  // Cups and flag poles.
   for (const h of level.holes) {
     ctx.fillStyle = '#24170d';
     ctx.fillRect(X(h.x - CUP_W / 2), Y(h.y), CUP_W * s, CUP_DEPTH * s);
-    const poleTop = h.y - 1.75;
     ctx.strokeStyle = '#f4f4f4';
     ctx.lineWidth = 0.07 * s;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(X(h.x), Y(h.y + CUP_DEPTH - 0.05));
-    ctx.lineTo(X(h.x), Y(poleTop));
+    ctx.lineTo(X(h.x), Y(h.y - 1.75));
     ctx.stroke();
-    const wave = Math.sin(time * 4 + h.x) * 0.07;
-    ctx.fillStyle = theme.accent;
-    ctx.beginPath();
-    ctx.moveTo(X(h.x + 0.03), Y(poleTop));
-    ctx.quadraticCurveTo(X(h.x + 0.45), Y(poleTop + 0.1 + wave), X(h.x + 0.85), Y(poleTop + 0.26 + wave));
-    ctx.quadraticCurveTo(X(h.x + 0.45), Y(poleTop + 0.42 - wave), X(h.x + 0.03), Y(poleTop + 0.52));
-    ctx.closePath();
-    ctx.fill();
   }
 
   // Ground and greens.
@@ -270,6 +219,87 @@ export function drawScene(ctx: CanvasRenderingContext2D, v: View, st: SceneState
       ctx.lineTo(X(b[0]), Y(b[1]));
       ctx.stroke();
     }
+  }
+}
+
+export function drawScene(ctx: CanvasRenderingContext2D, v: View, st: SceneState): void {
+  const { level, theme, time, sim } = st;
+  const s = v.s;
+  const X = (x: number) => v.ox + x * s;
+  const Y = (y: number) => v.oy + y * s;
+
+  if (!st.staticDrawn) drawStatic(ctx, v, level, theme);
+
+  // Wind streaks (the zone panels are in the static layer). Each streak is trimmed to the zone
+  // along the wind direction instead of clipping, which is costly on large zones.
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = 0.06 * s;
+  ctx.lineCap = 'round';
+  for (const it of level.items) {
+    if (it.t !== 'wind') continue;
+    const mag = Math.hypot(it.fx, it.fy) || 1;
+    const dx = it.fx / mag;
+    const dy = it.fy / mag;
+    const along = Math.abs(dx) * it.w + Math.abs(dy) * it.h;
+    const across = Math.abs(dy) * it.w + Math.abs(dx) * it.h;
+    const n = Math.max(3, Math.round(across * 2.2));
+    const half = along / 2 - 0.12;
+    const span = along + 1;
+    for (let i = 0; i < n; i++) {
+      const off = ((i + 0.5) / n - 0.5) * across;
+      const phase = (i * 0.618) % 1;
+      const u = ((phase * span + time * (1.5 + mag * 0.1)) % span) - span / 2;
+      const tail = Math.max(-half, u - 0.45);
+      if (u > half || u - tail < 0.05) continue; // outside the zone, or too short to read
+      const px = (t: number) => X(it.x + dx * t - dy * off);
+      const py = (t: number) => Y(it.y + dy * t + dx * off);
+      ctx.beginPath();
+      ctx.moveTo(px(tail), py(tail));
+      ctx.lineTo(px(u), py(u));
+      // arrow head
+      const hx = it.x + dx * u - dy * off;
+      const hy = it.y + dy * u + dx * off;
+      ctx.moveTo(X(hx - dx * 0.16 - dy * 0.1), Y(hy - dy * 0.16 + dx * 0.1));
+      ctx.lineTo(X(hx), Y(hy));
+      ctx.lineTo(X(hx - dx * 0.16 + dy * 0.1), Y(hy - dy * 0.16 - dx * 0.1));
+      ctx.stroke();
+    }
+  }
+
+  // Water surface: a thin wavy band on top of the still water in the static layer.
+  for (const it of level.items) {
+    if (it.t !== 'water') continue;
+    const top = it.y - it.h / 2;
+    const x0 = it.x - it.w / 2;
+    const x1 = it.x + it.w / 2;
+    const wave = (x: number) => Y(top + Math.sin(x * 3 + time * 2.4) * 0.04);
+    ctx.fillStyle = WATER;
+    ctx.beginPath();
+    ctx.moveTo(X(x0), Y(top + WAVE + 0.02));
+    for (let x = x0; x <= x1 + 1e-6; x += 0.1) ctx.lineTo(X(x), wave(x));
+    ctx.lineTo(X(x1), wave(x1));
+    ctx.lineTo(X(x1), Y(top + WAVE + 0.02));
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.lineWidth = 0.05 * s;
+    ctx.beginPath();
+    ctx.moveTo(X(x0), wave(x0));
+    for (let x = x0 + 0.1; x <= x1 + 1e-6; x += 0.1) ctx.lineTo(X(x), wave(x));
+    ctx.stroke();
+  }
+
+  // Flags (the poles are part of the static layer).
+  for (const h of level.holes) {
+    const poleTop = h.y - 1.75;
+    const wave = Math.sin(time * 4 + h.x) * 0.07;
+    ctx.fillStyle = theme.accent;
+    ctx.beginPath();
+    ctx.moveTo(X(h.x + 0.03), Y(poleTop));
+    ctx.quadraticCurveTo(X(h.x + 0.45), Y(poleTop + 0.1 + wave), X(h.x + 0.85), Y(poleTop + 0.26 + wave));
+    ctx.quadraticCurveTo(X(h.x + 0.45), Y(poleTop + 0.42 - wave), X(h.x + 0.03), Y(poleTop + 0.52));
+    ctx.closePath();
+    ctx.fill();
   }
 
   // Bouncers.
@@ -423,11 +453,14 @@ export function drawScene(ctx: CanvasRenderingContext2D, v: View, st: SceneState
     }
   }
 
-  // Water surface in front of the ball, so a falling ball looks submerged.
+  // Tint over a ball that has reached the water, so it looks submerged. Only where needed:
+  // painting every pond twice per frame is costly on low-end phones.
   for (const it of level.items) {
     if (it.t !== 'water') continue;
+    const top = it.y - it.h / 2;
+    if (!balls.some((b) => !b.sunk && Math.abs(b.x - it.x) < it.w / 2 + BALL_R && b.y > top - BALL_R)) continue;
     ctx.fillStyle = 'rgba(47,155,224,0.45)';
-    ctx.fillRect(X(it.x - it.w / 2), Y(it.y - it.h / 2 + 0.06), it.w * s, (it.h - 0.06) * s);
+    ctx.fillRect(X(it.x - it.w / 2), Y(top + 0.06), it.w * s, (it.h - 0.06) * s);
   }
 
   drawParticles(ctx, v, st.particles);
