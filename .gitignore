@@ -4,3 +4,4 @@ dist-preview/
 *.log
 .DS_Store
 test-results/
+dist-crazygames/

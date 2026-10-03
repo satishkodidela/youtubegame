@@ -1,18 +1,25 @@
 /// <reference types="vitest/config" />
 import { defineConfig, type Plugin } from 'vite';
 
-// Two build targets:
-//   vite build                -> dist/          YouTube Playables bundle (SDK script first, cloud save only)
-//   vite build --mode preview -> dist-preview/  one self-contained HTML file for testing anywhere
-//                                               (no SDK, progress kept in localStorage)
-const SDK_TAG = '<script src="https://www.youtube.com/game_api/v1"></script>';
+// Build targets:
+//   vite build                   -> dist/             YouTube Playables (ytgame SDK first, cloud save only)
+//   vite build --mode crazygames -> dist-crazygames/  CrazyGames (SDK v3 first, Data Module saves)
+//   vite build --mode preview    -> dist-preview/     one self-contained HTML file for testing anywhere
+//                                                    (no SDK, progress kept in localStorage)
+type Target = 'playables' | 'crazygames' | 'preview' | 'dev';
 
-function playablesSdk(enabled: boolean): Plugin {
+const SDK_TAGS: Partial<Record<Target, string>> = {
+  playables: '<script src="https://www.youtube.com/game_api/v1"></script>',
+  crazygames: '<script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>',
+};
+const OUT_DIRS: Partial<Record<Target, string>> = { playables: 'dist', crazygames: 'dist-crazygames', preview: 'dist-preview' };
+
+function platformSdk(target: Target): Plugin {
   return {
-    name: 'playables-sdk',
+    name: 'platform-sdk',
     transformIndexHtml(html) {
-      // The SDK has to be the first script on the page, before any game code.
-      return html.replace('<!--YT_SDK-->', enabled ? SDK_TAG : '');
+      // The platform SDK has to be the first script on the page, before any game code.
+      return html.replace('<!--PLATFORM_SDK-->', SDK_TAGS[target] ?? '');
     },
   };
 }
@@ -40,17 +47,17 @@ function inlineIntoHtml(): Plugin {
 }
 
 export default defineConfig(({ command, mode }) => {
-  const preview = mode === 'preview';
-  const playables = command === 'build' && !preview;
+  const target: Target = command === 'serve' ? 'dev' : mode === 'preview' || mode === 'crazygames' ? mode : 'playables';
   return {
     base: './',
     define: {
-      __PLAYABLES__: JSON.stringify(playables),
+      __PLAYABLES__: JSON.stringify(target === 'playables'),
+      __CRAZYGAMES__: JSON.stringify(target === 'crazygames'),
       __DEV_TOOLS__: JSON.stringify(command === 'serve'),
     },
-    plugins: [playablesSdk(playables), ...(preview ? [inlineIntoHtml()] : [])],
+    plugins: [platformSdk(target), ...(target === 'preview' ? [inlineIntoHtml()] : [])],
     build: {
-      outDir: preview ? 'dist-preview' : 'dist',
+      outDir: OUT_DIRS[target] ?? 'dist',
       target: 'es2019',
       assetsInlineLimit: 100_000,
       modulePreload: false,
