@@ -79,7 +79,7 @@ function tune(level: LevelDef): Result {
 
 function runChild(id: string): Promise<Result> {
   return new Promise((resolve, reject) => {
-    const p = spawn('npx', ['vite-node', 'scripts/par.ts', '--', file, id, '--child', '--samples', String(samples)], {
+    const p = spawn('npx', ['tsx', 'scripts/par.ts', '--', file, id, '--child', '--samples', String(samples)], {
       stdio: ['ignore', 'pipe', 'inherit'],
     });
     let out = '';

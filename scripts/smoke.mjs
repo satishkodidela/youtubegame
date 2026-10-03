@@ -54,11 +54,12 @@ await smoke({
         check(ff >= 0 && ld > ff && gr > ld, `startup order firstFrameReady -> loadData -> gameReady (${names.join(', ')})`);
         check(names.filter((n) => n === 'gameReady').length === 1, 'gameReady called once');
 
-        await playLevelOne(page);
+        await playLevelOne(page); // a first session starts in level 1, with no title screen
         c = await calls(page);
         const save = c.filter((x) => x.name === 'saveData').pop();
         const data = save ? JSON.parse(save.arg) : null;
-        check(!!data && data.v >= 1 && data.stars.m01 >= 1, `win is cloud-saved (${save?.arg})`);
+        check(!!data && data.v >= 2 && data.stars.m01 >= 1, `win is cloud-saved in the current format (${save?.arg})`);
+        check(!!data && data.streak && data.daily && data.look, 'save carries the v2 fields (daily, streak, look)');
         const score = c.filter((x) => x.name === 'sendScore').pop();
         check(!!score && score.arg === data?.stars.m01, `sendScore reports total stars (${score?.arg})`);
         check((await audioContexts(page)) === 0, 'no audio started while YouTube audio is off');
@@ -83,11 +84,12 @@ await smoke({
       label: 'returning player, sound on',
       mock: { audio: true, save: JSON.stringify(returning) },
       async fn(page, check) {
-        await playLevelOne(page); // "Play" continues at the first unsolved level, which is 1-1 here
+        await playLevelOne(page, { returning: true }); // "Play" continues at the first unsolved level, which is 1-1 here
         const c = await calls(page);
         const save = c.filter((x) => x.name === 'saveData').pop();
         const data = save ? JSON.parse(save.arg) : null;
         check(!!data && data.stars.m01 === 3 && data.stars.m02 === 2 && data.future === 'kept', `progress merged, unknown fields kept (${save?.arg})`);
+        check(!!data && data.v === 2 && data.streak && data.streak.count === 0, `v1 save upgraded to v2 (${save?.arg})`);
         const score = c.filter((x) => x.name === 'sendScore').pop();
         check(score?.arg === 5, `score is the new total (${score?.arg})`);
         check((await audioContexts(page)) === 1, 'audio starts after a tap when YouTube audio is on');

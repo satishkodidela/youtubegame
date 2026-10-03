@@ -11,10 +11,23 @@ game code ships to both: each build includes only its own platform's SDK code.
   4. **Workshop**: moving platforms, lifts and spinning bars, where the line also sets the timing
   5. **Gusts**: wind zones and updrafts, then two-ball levels
 - The UI has no text, so nothing needs translating. Level 1 teaches itself with a ghost finger that
-  draws the answer.
+  draws the answer, and a first session lands straight in it: the title screen waits until there
+  is something to come back to.
 - Retry is instant: tap during a roll to start over. The last line stays as a faint ghost so you can
-  adjust it.
-- After 3 misses on a level, a hint button appears and shows a line that's known to work.
+  adjust it. A win card moves on by itself after about 2 seconds; tapping it keeps it open to retry
+  for 3 stars.
+- Help before frustration: after 2 misses on the first 15 levels (3 later) a hint button shows a
+  line that's known to work, and after 4 misses a skip button appears (the unlock rules always
+  allowed skipping 2 levels; now players can see it).
+- **Daily Hole**: one new level a day, the same for everyone, from a bundled set of 120 verified
+  levels (no server needed). Winning it on consecutive days builds a streak, shown on the title
+  screen, with rewards at 3, 7 and 14 days.
+- **Looks**: ball skins and ink colours. A new one unlocks every 15 stars, a few more come from the
+  streak. They change nothing in physics.
+- **Gold ink**: an expert medal for finishing a level with no more ink than the solver's own line.
+  Once a level has 3 stars, the ink meter shows where that line ends.
+- Progress is always in view: holes done per world on the level grid and the win card, the star
+  total counting up after every win, and a preview of the next world when one is finished.
 
 ## Commands
 
@@ -28,15 +41,19 @@ npm run build:preview     # one self-contained HTML file -> dist-preview/index.h
 npm run smoke             # runs dist/ against a mock Playables SDK (needs `npm run build` first)
 npm run smoke:crazygames  # runs dist-crazygames/ against a mock CrazyGames SDK (needs `npm run build:crazygames`)
 npm run par -- src/levels/w2-springs.json [ids...] [--write]   # level tuning tool, see below
+npm run difficulty [-- --reorder [--write]]   # beginner win rate per level; optionally reorder each world by it
+npm run daily-gen      # regenerate the 120 Daily Hole levels (several minutes, see below)
 npm run perf           # frame-rate benchmark on a simulated low-end phone (needs `npm run build:preview` first)
 npm run promo          # store covers and preview videos rendered from the real game -> promo-out/ (needs ffmpeg)
 ```
+
+The TypeScript tools (`par`, `difficulty`, `daily-gen`) run through `tsx`, which is a dev dependency.
 
 The smoke tests use Playwright's Chromium. If Playwright has no browser installed, run
 `npx playwright install chromium`, or point `CHROMIUM_PATH` at an existing Chromium.
 
 Dev-server shortcuts while playing: `[` and `]` change level, `h` shows the hint, `w` plays the
-hint, `r` retries and `Esc` pauses. These are compiled out of the builds.
+hint, `d` opens today's Daily Hole, `r` retries and `Esc` pauses. These are compiled out of the builds.
 
 ## CI
 
@@ -44,7 +61,7 @@ hint, `r` retries and `Esc` pauses. These are compiled out of the builds.
 
 | Check | What it runs |
 | --- | --- |
-| **Typecheck and tests** | `npm run typecheck`, `npm test` (unit tests plus the full level check) |
+| **Typecheck and tests** | `npm run typecheck`, `npm test` (unit tests, the full level check including the Daily Holes, and the difficulty-curve check) |
 | **Build and SDK smoke test** | All three builds, then `npm run smoke` and `npm run smoke:crazygames`. It uploads each build as a downloadable artifact (`youtube-playables-build`, `crazygames-build`, `preview-build`) and reports bundle sizes |
 
 Make both checks required in **Settings → Rules → Rulesets** (or **Settings → Branches**) for
@@ -54,13 +71,13 @@ Make both checks required in **Settings → Rules → Rulesets** (or **Settings 
 
 | Path | What it is |
 | --- | --- |
-| `src/sim/` | Physics and rules, with no DOM access, so tests and tools run them headless. `sim.ts` (Planck.js world, fixed 120 Hz step), `stroke.ts` (drawing rules), `shapes.ts` (geometry shared by physics, drawing and rendering), `solver.ts` (par finder) |
-| `src/game/` | `game.ts` (screens, input, HUD), `save.ts` (versioned save), `progress.ts` (unlocks), `audio.ts` (synthesised sound) |
-| `src/render/` | Canvas 2D drawing: scene, icons, per-world themes |
+| `src/sim/` | Physics and rules, with no DOM access, so tests and tools run them headless. `sim.ts` (Planck.js world, fixed 120 Hz step), `stroke.ts` (drawing rules), `shapes.ts` (geometry shared by physics, drawing and rendering), `solver.ts` (par finder), `beginner.ts` (a modelled first-time player, for the difficulty curve) |
+| `src/game/` | `game.ts` (screens, input, HUD), `save.ts` (versioned save), `progress.ts` (unlocks), `daily.ts` (Daily Hole and streak), `cosmetics.ts` (skins and unlock rules), `audio.ts` (synthesised sound) |
+| `src/render/` | Canvas 2D drawing: scene, icons, per-world themes and the skin types |
 | `src/platform/` | The only code that talks to a host. `platform.ts` has one adapter per platform (YouTube `ytgame`, CrazyGames SDK v3, plain web), and the build flags keep only the right one |
-| `src/levels/*.json` | Level data, one file per world |
+| `src/levels/*.json` | Level data, one file per world, plus `daily.json` (generated) |
 | `src/editor/` | Dev-only level editor and overview pages (never bundled) |
-| `scripts/` | `par.ts` (tuning), `smoke.mjs` (SDK check), `format.ts` (JSON layout) |
+| `scripts/` | `par.ts` (tuning), `difficulty.ts` (difficulty curve), `daily-gen.ts` (Daily Hole generator), `smoke.mjs` (SDK check), `format.ts` (JSON layout) |
 
 **Determinism.** Nothing moves while you draw. The physics world is built when the ball is released
 and steps at exactly 1/120 s, and moving parts use polynomial motion with no `sin`/`cos`. So the
@@ -84,6 +101,17 @@ CPU slowed 6× at 390×844 and 2× density, the busiest levels went from about 1
 
 **Unlocks.** A level is open while at most 2 levels before it are unsolved, so a player can skip two
 hard levels and keep going.
+
+**Daily Hole.** `daily.ts` numbers days by the device's local calendar, so a new hole appears at
+local midnight and everyone on the same date gets the same level: day 0 is 3 October 2026 and the
+set of 120 wraps around. Results are saved per day number, and the streak counts consecutive days
+with a win (a streak is alive if yesterday or today was won). No clock or level comes from a
+server, which keeps the game within the no-outside-requests rule.
+
+**Looks.** `cosmetics.ts` lists the ball skins and ink colours with what unlocks each (a star
+total or a best streak). Unlocks are derived from the save, so only the chosen look and which
+unlocks have been announced are stored. The gold-ink medal is derived too: a level's best ink is
+compared with the length of its stored hint.
 
 ## Levels
 
@@ -109,6 +137,25 @@ Item types: `box`, `poly` (convex, up to 8 points), `bouncer`, `water`, `mover` 
 is 16). A hole is a green block with a cup cut into it, and its `y` is the surface of the green.
 
 **`id` is the save key, so never rename or reuse one after release.** Reordering levels is safe.
+A level may carry `"theme": N` to pick its look (Daily Holes do; campaign levels use their world's).
+
+**Difficulty curve.** `npm run difficulty` plays every level 500 times as a modelled beginner
+(`src/sim/beginner.ts`: one rough ramp from the ball towards the flag, with a shaky hand) and
+prints how often it wins. The number is pessimistic, since real players learn and use hints, but
+the order between levels is what matters. Levels in each world are ordered by it: easiest first,
+and the hardest ones spread out among medium ones instead of stacked. `--reorder --write` applies
+that order (the first level of world 1 is pinned, since it is the tutorial). `tests/difficulty.test.ts`
+fails the build if the first 20 levels stop opening gently, if a world's first level is a wall, or
+if two very hard levels sit back to back, so a later edit can't reintroduce a wall where the
+session-length metric is decided.
+
+**Daily Holes.** `npm run daily-gen` builds `src/levels/daily.json` from six templates (ledges,
+springs, ponds, lifts, gusts, spinners) with a seeded random generator, mirrored half the time,
+and keeps only candidates that pass the same checks as hand-made levels: not won without a line, a
+robust par found by the solver (which sets ink, stars and the hint), and a beginner win rate between
+2% and 75%. Seeds are processed in order, so the output is reproducible however many processes run,
+and each week of seven is sorted easy to hard. Regenerating changes future days only if you keep
+the same seeds; ids are `d` + seed.
 
 **Tuning with `npm run par`.** For each level, the solver searches for the shortest line that still
 wins when it's redrawn with a slightly shaky hand. That's the robust par: at least 55% of wobbly
@@ -143,14 +190,14 @@ CrazyGames build fills it with its own SDK, and the preview and dev builds leave
 | Pause and resume through the SDK only | `ytgame.system.onPause/onResume` stop the frame loop, physics, input and audio. The Page Visibility fallback exists only in dev and preview builds (`__PLAYABLES__` removes it) |
 | Audio respects YouTube's setting | `isAudioEnabled` and `onAudioEnabledChange`. No AudioContext is created while it's off. There's also an in-game toggle |
 | Cloud save only | `saveData`/`loadData`. There's no localStorage, cookies or IndexedDB in `dist/` |
-| Save backward compatibility | `save.ts` has a version field and a migration hook, keys by level id, and keeps unknown fields. Tests cover v0 saves, newer saves and corrupt data |
+| Save backward compatibility | `save.ts` has a version field and a migration hook, keys by level id, and keeps unknown fields. v2 added the Daily Hole, streak and look; v1 saves upgrade in place. Tests cover v0 and v1 saves, newer saves and corrupt data |
 | Don't lose progress | If the save can't be read after 3 tries, the session plays on but never writes, so it can't overwrite the real save |
 | Score | `sendScore` with total stars, sent whenever the total goes up |
 | Health | Uncaught errors call `health.logError`, and SDK call failures call `logWarning` |
 | No outside requests | Everything is bundled (system fonts, synthesised audio). `npm run smoke` fails on any request outside the game |
 | Responsive, touch and mouse | Pointer events, resizing keeps state, and it works in portrait and landscape |
 | No external links, sharing, ads or IAP | None |
-| Bundle size | About 272 KB (66 KB gzipped). The limit is 30 MiB for the initial bundle |
+| Bundle size | About 324 KB (80 KB gzipped), of which the 120 Daily Holes are about 50 KB. The limit is 30 MiB for the initial bundle |
 
 The code can't do these steps for you:
 

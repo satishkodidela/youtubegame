@@ -31,10 +31,20 @@ export const calls = (page) => page.evaluate(() => window.__calls);
 export const snap = (page) => page.evaluate(() => document.querySelector('canvas').toDataURL());
 export const audioContexts = (page) => page.evaluate(() => window.__audioContexts);
 
-/** Taps Play on the title screen. */
+/** Taps Play on the title screen (returning players; a first session lands in level 1 by itself). */
 export async function tapPlay(page) {
-  await page.mouse.click(W / 2, H * 0.62);
+  await page.mouse.click(W / 2, H * 0.58);
   await page.waitForTimeout(400);
+}
+
+/** Waits until a predicate on the page holds, polling, up to `ms`. Returns whether it did. */
+export async function waitFor(page, pred, ms = 6000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    if (await pred()) return true;
+    await page.waitForTimeout(100);
+  }
+  return pred();
 }
 
 /** Draws level 1's ramp (a 3-star line) and lets the ball roll in. */
@@ -48,8 +58,9 @@ export async function drawLevelOneRamp(page) {
   await page.waitForTimeout(3500);
 }
 
-export async function playLevelOne(page) {
-  await tapPlay(page);
+/** Plays level 1: taps Play first for a returning player; a new player is already in the level. */
+export async function playLevelOne(page, { returning = false } = {}) {
+  if (returning) await tapPlay(page);
   await drawLevelOneRamp(page);
 }
 

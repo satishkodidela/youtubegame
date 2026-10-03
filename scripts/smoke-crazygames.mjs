@@ -5,7 +5,7 @@
 // gameplayStart/Stop around real play (not menus, pause or the win card), saves through the
 // Data Module, happytime on a 3-star win, the mute setting (including a live change), no outside
 // network calls, no errors, and a working localStorage fallback when the SDK can't load.
-import { audioContexts, calls, drawLevelOneRamp, playLevelOne, smoke, tapPlay, W, H } from './smoke-lib.mjs';
+import { audioContexts, calls, drawLevelOneRamp, playLevelOne, smoke, tapPlay, waitFor, W, H } from './smoke-lib.mjs';
 
 const KEY = 'draw-to-hole-save';
 
@@ -74,11 +74,8 @@ await smoke({
         const lp = n.indexOf('loadingStop');
         check(ls > 0 && gi > ls && lp > gi, 'loadingStart -> load save -> loadingStop');
         check(n.filter((x) => x === 'loadingStop').length === 1, 'loadingStop called once');
-        check(!n.includes('gameplayStart'), 'no gameplay reported on the title screen');
-
-        await tapPlay(page);
-        c = await calls(page);
-        check(gameplay(c).join() === 'gameplayStart', `gameplayStart when a level opens (${gameplay(c).join()})`);
+        // A first session skips the title screen and lands in level 1, so gameplay starts straight away.
+        check(gameplay(c).join() === 'gameplayStart', `gameplayStart as a new player lands in level 1 (${gameplay(c).join()})`);
 
         await page.mouse.click(PAUSE[0], PAUSE[1]);
         await page.waitForTimeout(200);
@@ -89,19 +86,24 @@ await smoke({
 
         await drawLevelOneRamp(page);
         c = await calls(page);
-        check(gameplay(c).join() === 'gameplayStart,gameplayStop,gameplayStart,gameplayStop', `start/stop alternate, stop on the win card (${gameplay(c).join()})`);
+        check(gameplay(c).join().startsWith('gameplayStart,gameplayStop,gameplayStart,gameplayStop'), `start/stop alternate, stop on the win card (${gameplay(c).join()})`);
         const save = c.filter((x) => x.name === 'setItem').pop();
         const data = save ? JSON.parse(save.arg) : null;
-        check(!!data && data.v >= 1 && data.stars.m01 === 3, `win saved through the Data Module (${save?.arg})`);
+        check(!!data && data.v >= 2 && data.stars.m01 === 3, `win saved through the Data Module (${save?.arg})`);
         check(names(c).includes('happytime'), 'happytime on a 3-star win');
         check((await audioContexts(page)) === 1, 'audio starts after a tap when CrazyGames sound is on');
+        // The win card moves on to level 2 by itself, which starts gameplay again.
+        const advanced = await waitFor(page, async () => gameplay(await calls(page)).length >= 5, 4000);
+        c = await calls(page);
+        check(advanced && gameplay(c)[4] === 'gameplayStart', `win card auto-advances to the next level (${gameplay(c).join()})`);
       },
     },
     {
       label: 'muted by CrazyGames, then unmuted',
       mock: { muted: true },
       async fn(page, check) {
-        await tapPlay(page);
+        await page.mouse.click(W / 2, H - 40); // any tap on the playfield (a new player is already in level 1)
+        await page.waitForTimeout(300);
         check((await audioContexts(page)) === 0, 'no audio while CrazyGames has sound muted');
         await page.evaluate(() => window.__setMuted(false));
         await page.mouse.click(W / 2, H - 40); // any tap on the playfield
@@ -113,8 +115,10 @@ await smoke({
       label: 'returning player',
       mock: { data: { [KEY]: JSON.stringify(returning) } },
       async fn(page, check) {
-        await playLevelOne(page); // "Play" continues at the first unsolved level, which is 1-1 here
-        const c = await calls(page);
+        let c = await calls(page);
+        check(!names(c).includes('gameplayStart'), 'no gameplay reported on the title screen');
+        await playLevelOne(page, { returning: true }); // "Play" continues at the first unsolved level, which is 1-1 here
+        c = await calls(page);
         const save = c.filter((x) => x.name === 'setItem').pop();
         const data = save ? JSON.parse(save.arg) : null;
         check(!!data && data.stars.m01 === 3 && data.stars.m02 === 2 && data.future === 'kept', `progress merged, unknown fields kept (${save?.arg})`);
