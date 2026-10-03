@@ -65,7 +65,7 @@ export class Game {
   private inkUsed = 0;
   private failCount = 0;
   private hint: { path: Pt[]; t: number } | null = null;
-  private result = { stars: 0, best: false };
+  private result = { stars: 0 };
   private paused = false;
   private particles: Particle[] = [];
 
@@ -199,10 +199,11 @@ export class Game {
     this.cur = i;
     this.screen = 'play';
     this.paused = false;
-    this.ghost = null;
+    this.line = null;
     this.failCount = 0;
     this.particles = [];
     this.resetAttempt();
+    this.ghost = null;
     // The very first level teaches itself: a finger draws the solution until the player tries.
     this.hint = i === 0 && !this.save.stars[this.level.id] ? { path: this.level.hint, t: 0 } : null;
   }
@@ -230,9 +231,8 @@ export class Game {
     this.phase = 'won';
     this.phaseTime = 0;
     const stars = starsFor(this.level, this.inkUsed);
-    const prev = this.save.stars[this.level.id] ?? 0;
     const changed = recordWin(this.save, this.level.id, stars, this.inkUsed);
-    this.result = { stars, best: stars > prev && prev > 0 };
+    this.result = { stars };
     this.starsPopped = 0;
     if (changed) this.persist();
     this.sfx.win(stars);

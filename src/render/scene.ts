@@ -345,7 +345,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, v: View, st: SceneState
   // Lines.
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  if (st.ghost && !st.drawing && !st.line) {
+  if (st.ghost && !st.line) {
     pathLine(ctx, v, st.ghost);
     ctx.strokeStyle = INK_GHOST;
     ctx.lineWidth = LINE_HALF * 2 * s;
