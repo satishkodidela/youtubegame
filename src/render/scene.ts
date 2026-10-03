@@ -1,7 +1,7 @@
 import { BALL_R, CUP_DEPTH, CUP_W, LINE_HALF, WORLD_H, WORLD_W, type LevelDef, type Pt } from '../levels/types';
 import { DEG, rectPoly } from '../sim/geometry';
 import { bouncerNormal, bouncerPoly, moverPose, spinnerAngle, staticSolids } from '../sim/shapes';
-import type { BallView, Sim } from '../sim/sim';
+import { GRAVITY, type BallView, type Sim } from '../sim/sim';
 import { INK, INK_GHOST, type Theme } from './theme';
 
 // Draws a level in world space. The view maps world units to canvas pixels.
@@ -398,16 +398,26 @@ export function drawScene(ctx: CanvasRenderingContext2D, v: View, st: SceneState
   });
 
   if (st.dropCue) {
+    // Chevrons run along the start of the ball's real path: straight down for a plain drop,
+    // along the launch arc when the level fires the ball.
     for (const b of level.balls) {
-      for (let k = 0; k < 3; k++) {
-        const ph = (time * 1.4 + k / 3) % 1;
-        const cy = b.y + BALL_R + 0.25 + ph * 0.8;
-        ctx.strokeStyle = `rgba(31,42,68,${0.45 * (1 - ph)})`;
+      const launched = Math.hypot(b.vx ?? 0, b.vy ?? 0) > 0.01;
+      const path = launchPath(b.x, b.y, b.vx ?? 0, b.vy ?? 0, launched ? 2.4 : 1.4);
+      const count = launched ? 4 : 3;
+      const span = launched ? 1.8 : 0.8;
+      for (let k = 0; k < count; k++) {
+        const ph = (time * 1.4 + k / count) % 1;
+        const at = pathAt(path, BALL_R + 0.25 + ph * span);
+        if (!at) continue;
+        const [px, py, dx, dy] = at;
+        const nx = -dy;
+        const ny = dx;
+        ctx.strokeStyle = `rgba(31,42,68,${(launched ? 0.6 : 0.45) * (1 - ph)})`;
         ctx.lineWidth = 0.06 * s;
         ctx.beginPath();
-        ctx.moveTo(X(b.x - 0.13), Y(cy - 0.1));
-        ctx.lineTo(X(b.x), Y(cy));
-        ctx.lineTo(X(b.x + 0.13), Y(cy - 0.1));
+        ctx.moveTo(X(px - dx * 0.1 + nx * 0.13), Y(py - dy * 0.1 + ny * 0.13));
+        ctx.lineTo(X(px), Y(py));
+        ctx.lineTo(X(px - dx * 0.1 - nx * 0.13), Y(py - dy * 0.1 - ny * 0.13));
         ctx.stroke();
       }
     }
@@ -421,6 +431,36 @@ export function drawScene(ctx: CanvasRenderingContext2D, v: View, st: SceneState
   }
 
   drawParticles(ctx, v, st.particles);
+}
+
+/** Points along a ball's free flight from (x, y) with velocity (vx, vy): [x, y, distance travelled]. */
+function launchPath(x: number, y: number, vx: number, vy: number, maxLen: number): [number, number, number][] {
+  const out: [number, number, number][] = [[x, y, 0]];
+  const dt = 1 / 240;
+  let d = 0;
+  for (let i = 0; i < 2400 && d < maxLen; i++) {
+    vy += GRAVITY * dt;
+    const nx = x + vx * dt;
+    const ny = y + vy * dt;
+    d += Math.hypot(nx - x, ny - y);
+    x = nx;
+    y = ny;
+    out.push([x, y, d]);
+  }
+  return out;
+}
+
+/** Position and unit direction at distance `dist` along a launchPath, or null past its end. */
+function pathAt(path: [number, number, number][], dist: number): [number, number, number, number] | null {
+  for (let i = 1; i < path.length; i++) {
+    if (path[i][2] < dist) continue;
+    const [ax, ay, ad] = path[i - 1];
+    const [bx, by, bd] = path[i];
+    const len = Math.hypot(bx - ax, by - ay) || 1;
+    const t = bd > ad ? (dist - ad) / (bd - ad) : 0;
+    return [ax + (bx - ax) * t, ay + (by - ay) * t, (bx - ax) / len, (by - ay) / len];
+  }
+  return null;
 }
 
 function nearestHole(level: LevelDef, x: number, y: number) {
