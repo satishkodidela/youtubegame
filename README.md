@@ -29,6 +29,7 @@ npm run smoke             # runs dist/ against a mock Playables SDK (needs `npm 
 npm run smoke:crazygames  # runs dist-crazygames/ against a mock CrazyGames SDK (needs `npm run build:crazygames`)
 npm run par -- src/levels/w2-springs.json [ids...] [--write]   # level tuning tool, see below
 npm run perf           # frame-rate benchmark on a simulated low-end phone (needs `npm run build:preview` first)
+npm run promo          # store covers and preview videos rendered from the real game -> promo-out/ (needs ffmpeg)
 ```
 
 The smoke tests use Playwright's Chromium. If Playwright has no browser installed, run
@@ -197,3 +198,16 @@ gameplay would need to pause while an ad plays.
 The CrazyGames typings in `src/platform/crazygames.d.ts` cover only what the game uses. The
 CrazyGames docs couldn't be reached from the build environment, so they were checked against two
 published SDK integrations. Compare them with the current docs before you submit.
+
+## Store art
+
+`npm run promo` renders store art with the game's own renderer and physics, so it always matches
+the current levels and look:
+
+- Covers: 1920×1080, 800×1200 and 800×800 PNG. Each shows a drawn line, the ball's dotted flight
+  and the flag.
+- Preview videos: 1920×1080 and 1080×1620 H.264 MP4 at 30 fps, under 20 seconds. Five levels from
+  different worlds are drawn, released and finished with 3 stars.
+
+The shots and clips are chosen in `src/editor/promo.ts`. Listing text for CrazyGames (category,
+tags, description, controls) is in `store/crazygames-listing.md`.

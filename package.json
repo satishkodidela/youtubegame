@@ -15,7 +15,8 @@
     "smoke": "node scripts/smoke.mjs",
     "perf": "node scripts/perf.mjs",
     "build:crazygames": "tsc --noEmit && vite build --mode crazygames",
-    "smoke:crazygames": "node scripts/smoke-crazygames.mjs"
+    "smoke:crazygames": "node scripts/smoke-crazygames.mjs",
+    "promo": "node scripts/promo.mjs"
   },
   "dependencies": {
     "planck": "^1.5.0"
