@@ -144,8 +144,9 @@ export class Game {
 
   private resize(): void {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const W = Math.max(1, window.innerWidth);
-    const H = Math.max(1, window.innerHeight);
+    // The body fills the frame (minus any safe-area padding the host adds); fall back to the window.
+    const W = Math.max(1, document.body.clientWidth || window.innerWidth);
+    const H = Math.max(1, document.body.clientHeight || window.innerHeight);
     this.W = W;
     this.H = H;
     this.dpr = dpr;
