@@ -4,7 +4,7 @@ import { DT, Sim, type SimEvent } from '../sim/sim';
 import { Stroke, traceStroke } from '../sim/stroke';
 import type { Platform } from '../platform/platform';
 import { drawIcon, drawStar, type IconName } from '../render/icons';
-import { drawBackground, drawScene, fitView, roundRect, stepParticles, type Particle, type View } from '../render/scene';
+import { drawBackground, drawScene, drawStatic, fitView, roundRect, stepParticles, type Particle, type View } from '../render/scene';
 import { FONT, STAR_OFF, STAR_ON, THEMES, UI_DARK, UI_LIGHT } from '../render/theme';
 import { Sfx } from './audio';
 import { continueIndex, flatten, unlockedMask, type LevelRef } from './progress';
@@ -24,6 +24,13 @@ const FAIL_RESET = 0.7;
 const WIN_CARD_DELAY = 0.9;
 const HINT_AFTER_FAILS = 3;
 const MAX_STEPS_PER_FRAME = 12;
+/** Canvas resolution steps, as a fraction of the device's pixel ratio (capped at 2). */
+const QUALITY_STEPS = [1, 0.75, 0.625, 0.5];
+/** Never render below this many canvas pixels per CSS pixel. */
+const MIN_DPR = 1;
+/** Frames per quality check, and the median frame time (ms) that triggers a step down. */
+const QUALITY_WINDOW = 45;
+const SLOW_FRAME_MS = 22;
 const DEMO_TRACE = 1.8;
 
 export class Game {
@@ -43,6 +50,12 @@ export class Game {
 
   private time = 0;
   private lastNow = 0;
+  /** Index into QUALITY_STEPS. Only ever goes down (to a lower resolution) during a session. */
+  private quality = 0;
+  private frameTimes: number[] = [];
+  /** Sky, hills and the current level's static layer, painted once and copied every frame. */
+  private backdrop: HTMLCanvasElement | null = null;
+  private backdropKey = '';
   private rafId = 0;
   private systemPaused = false;
 
@@ -143,7 +156,8 @@ export class Game {
   }
 
   private resize(): void {
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const base = Math.min(2, window.devicePixelRatio || 1);
+    const dpr = Math.max(Math.min(base, MIN_DPR), base * QUALITY_STEPS[this.quality]);
     // The body fills the frame (minus any safe-area padding the host adds); fall back to the window.
     const W = Math.max(1, document.body.clientWidth || window.innerWidth);
     const H = Math.max(1, document.body.clientHeight || window.innerHeight);
@@ -165,9 +179,30 @@ export class Game {
     if (this.systemPaused) return;
     const dt = Math.min(0.1, Math.max(0, (now - this.lastNow) / 1000));
     this.lastNow = now;
+    this.trackFrameTime(dt * 1000);
     this.update(dt);
     this.render();
     this.rafId = requestAnimationFrame((t) => this.frame(t));
+  }
+
+  /**
+   * Adaptive resolution: if the median frame over the last QUALITY_WINDOW frames is slow, render at
+   * the next lower resolution. Fill rate is what limits low-end phones, and it scales with pixels.
+   * A device that caps frames at 30 fps (battery saver) looks the same as a slow one, so it also
+   * steps down; that costs some sharpness, not smoothness.
+   */
+  private trackFrameTime(ms: number): void {
+    if (ms <= 0 || ms > 250) return; // first frame, or a stall (tab switch, GC), not a trend
+    this.frameTimes.push(ms);
+    if (this.frameTimes.length < QUALITY_WINDOW) return;
+    const sorted = this.frameTimes.sort((a, b) => a - b);
+    const median = sorted[sorted.length >> 1];
+    this.frameTimes = [];
+    if (median <= SLOW_FRAME_MS || this.quality >= QUALITY_STEPS.length - 1) return;
+    const base = Math.min(2, window.devicePixelRatio || 1);
+    if (base * QUALITY_STEPS[this.quality] <= MIN_DPR) return;
+    this.quality++;
+    this.resize();
   }
 
   // ---------------------------------------------------------------- persistence
@@ -489,14 +524,40 @@ export class Game {
 
   private render(): void {
     const ctx = this.ctx;
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.buttons = [];
     const worldIdx = this.screen === 'play' ? this.ref.world : this.screen === 'select' ? this.selectWorld : 0;
-    const theme = THEMES[worldIdx % THEMES.length];
-    drawBackground(ctx, this.W, this.H, theme, this.time);
+    const level = this.screen === 'play' ? this.level : this.screen === 'title' ? this.levels[0]?.level : undefined;
+    this.paintBackdrop(THEMES[worldIdx % THEMES.length], level);
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     if (this.screen === 'title') this.renderTitle();
     else if (this.screen === 'select') this.renderSelect();
     else this.renderPlay();
+  }
+
+  /** Copies the cached sky, hills and static level layer onto the canvas, repainting the cache if needed. */
+  private paintBackdrop(theme: (typeof THEMES)[number], level: LevelDef | undefined): void {
+    const { canvas, ctx } = this;
+    const key = `${THEMES.indexOf(theme)}|${level?.id ?? '-'}|${this.W}x${this.H}|${canvas.width}x${canvas.height}`;
+    if (!this.backdrop || key !== this.backdropKey) {
+      const c = this.backdrop ?? document.createElement('canvas');
+      c.width = canvas.width;
+      c.height = canvas.height;
+      const b = c.getContext('2d');
+      if (!b) {
+        // No second canvas available: draw everything directly every frame.
+        ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+        drawBackground(ctx, this.W, this.H, theme, 0);
+        if (level) drawStatic(ctx, this.view, level, theme);
+        return;
+      }
+      b.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      drawBackground(b, this.W, this.H, theme, 0);
+      if (level) drawStatic(b, this.view, level, theme);
+      this.backdrop = c;
+      this.backdropKey = key;
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(this.backdrop, 0, 0);
   }
 
   private btnSize(): number {
@@ -548,6 +609,7 @@ export class Game {
         particles: this.particles,
         dropCue: false,
         lowInk: false,
+        staticDrawn: true,
       });
     }
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
@@ -687,6 +749,7 @@ export class Game {
       particles: this.particles,
       dropCue: this.phase === 'draw' && !stroke,
       lowInk: !!stroke && stroke.inkLeft < level.ink * 0.15,
+      staticDrawn: true,
     });
     this.renderHud();
     if (this.phase === 'won' && this.phaseTime > WIN_CARD_DELAY) this.renderWinCard();

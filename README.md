@@ -25,6 +25,7 @@ npm run build          # YouTube Playables bundle -> dist/
 npm run build:preview  # one self-contained HTML file -> dist-preview/index.html (saves to localStorage)
 npm run smoke          # runs dist/ against a mock Playables SDK (needs `npm run build` first)
 npm run par -- src/levels/w2-springs.json [ids...] [--write]   # level tuning tool, see below
+npm run perf           # frame-rate benchmark on a simulated low-end phone (needs `npm run build:preview` first)
 ```
 
 `npm run smoke` uses Playwright's Chromium. If Playwright has no browser installed, run
@@ -69,6 +70,13 @@ static.
 **Ball and line collision.** On screen the line is 0.16 units thick, but in physics it's a
 zero-thickness Box2D chain, which is smooth and can't tunnel. The ball has a massless outer "skin"
 that collides only with lines, so it rests exactly on the visible edge of the line.
+
+**Performance on low-end phones.** Painting pixels is the cost, not JavaScript: frame time scales with
+canvas size. The sky, hills, clouds and everything in a level that never moves are painted once into
+a cached image that is copied each frame, and only moving things (ball, line, water surface, wind
+streaks, flags, moving parts) are drawn per frame. If frames stay slow (median over 22 ms), the game
+steps its resolution down from 2× towards 1× pixel density. `npm run perf` measures this: with the
+CPU slowed 6× at 390×844 and 2× density, the busiest levels went from about 13 fps to 36–48 fps.
 
 **Unlocks.** A level is open while at most 2 levels before it are unsolved, so a player can skip two
 hard levels and keep going.
