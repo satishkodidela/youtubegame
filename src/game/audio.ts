@@ -122,6 +122,11 @@ export class Sfx {
     for (let i = 0; i < 2 + stars - 1; i++) this.tone(notes[i], 0.22, 'triangle', 0.25, undefined, 0.12 * i + 0.25);
   }
 
+  /** A short rising run for a new unlock. */
+  unlockJingle(): void {
+    for (let i = 0; i < 4; i++) this.tone(660 + i * 110, 0.12, 'triangle', 0.2, undefined, 0.07 * i);
+  }
+
   starPop(i: number): void {
     this.tone(784 + i * 196, 0.15, 'triangle', 0.22, 1568 + i * 200);
   }

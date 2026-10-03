@@ -110,6 +110,8 @@ export interface LevelDef {
   items: Item[];
   /** A known solution. Used by tests, the tutorial finger and the hint. */
   hint: Pt[];
+  /** Look to draw the level with (index into THEMES). Campaign levels use their world's; Daily Holes set their own. */
+  theme?: number;
 }
 
 export interface WorldDef {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { SAVE_VERSION, emptySave, parseSave, recordWin, serializeSave, totalStars } from '../src/game/save';
+import { recordDaily } from '../src/game/daily';
+import { SAVE_VERSION, emptySave, isFresh, parseSave, recordWin, serializeSave, totalStars } from '../src/game/save';
 
 describe('save data', () => {
   it('starts empty for missing or corrupt data', () => {
@@ -36,6 +37,35 @@ describe('save data', () => {
     expect(s.v).toBe(SAVE_VERSION);
     expect(s.stars).toEqual({ m01: 3, m02: 2 });
     expect(s.sfx).toBe(false);
+  });
+
+  it('upgrades a v1 save to v2 with empty daily, streak and look fields', () => {
+    const s = parseSave('{"v":1,"stars":{"m01":3},"ink":{"m01":2.5},"sfx":true}');
+    expect(s.v).toBe(2);
+    expect(s.stars).toEqual({ m01: 3 });
+    expect(s.daily).toEqual({});
+    expect(s.streak).toEqual({ last: -1, count: 0, best: 0 });
+    expect(s.look).toEqual({ ball: 'classic', ink: 'navy' });
+    expect(s.seen).toEqual([]);
+    expect(isFresh(s)).toBe(false);
+    expect(isFresh(emptySave())).toBe(true);
+  });
+
+  it('round-trips v2 fields and cleans bad ones', () => {
+    const s = emptySave();
+    recordDaily(s, 20000, 2);
+    s.look = { ball: 'sun', ink: 'crimson' };
+    s.seen.push('sun');
+    const back = parseSave(serializeSave(s));
+    expect(back.daily).toEqual({ '20000': 2 });
+    expect(back.streak).toEqual({ last: 20000, count: 1, best: 1 });
+    expect(back.look).toEqual({ ball: 'sun', ink: 'crimson' });
+    expect(back.seen).toEqual(['sun']);
+    const bad = parseSave('{"v":2,"daily":{"abc":3,"5":"x","7":9,"8":0},"streak":{"last":"x","count":4},"look":{"ball":3},"seen":[1,"ok"]}');
+    expect(bad.daily).toEqual({ '7': 3 });
+    expect(bad.streak).toEqual({ last: -1, count: 0, best: 4 });
+    expect(bad.look).toEqual({ ball: 'classic', ink: 'navy' });
+    expect(bad.seen).toEqual(['ok']);
   });
 
   it('keeps fields it does not understand, so newer saves survive an older build', () => {

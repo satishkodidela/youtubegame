@@ -24,3 +24,29 @@ export const UI_LIGHT = '#ffffff';
 export const STAR_ON = '#ffc531';
 export const STAR_OFF = 'rgba(31,42,68,0.18)';
 export const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+
+// Cosmetics (see src/game/cosmetics.ts for the list and unlock rules).
+
+export type Unlock = { stars: number } | { streak: number };
+
+export type BallStyle = 'classic' | 'solid' | 'eight' | 'beach' | 'flame' | 'gold' | 'tennis';
+
+export interface BallSkin {
+  kind: 'ball';
+  id: string;
+  style: BallStyle;
+  /** Main colour, highlight colour, and the colour of the dimples or markings. */
+  base: string;
+  light: string;
+  mark: string;
+  unlock: Unlock;
+}
+
+export interface InkSkin {
+  kind: 'ink';
+  id: string;
+  color: string;
+  /** The faint colour used for the last attempt's ghost line. */
+  ghost: string;
+  unlock: Unlock;
+}

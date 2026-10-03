@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WORLDS } from '../src/levels';
+import { DAILY_LEVELS, WORLDS } from '../src/levels';
 import { BALL_R, WORLD_H, WORLD_W, type LevelDef } from '../src/levels/types';
 import { distPointSeg, pointInPoly } from '../src/sim/geometry';
 import { staticSolids } from '../src/sim/shapes';
@@ -8,6 +8,7 @@ import { traceStroke } from '../src/sim/stroke';
 
 const all: { label: string; level: LevelDef }[] = [];
 WORLDS.forEach((w, wi) => w.levels.forEach((level, li) => all.push({ label: `${wi + 1}-${li + 1} ${level.id}`, level })));
+DAILY_LEVELS.forEach((level, i) => all.push({ label: `daily ${i + 1} ${level.id}`, level }));
 
 describe('level data', () => {
   it('has 5 worlds of 12 levels', () => {
@@ -18,6 +19,11 @@ describe('level data', () => {
   it('uses unique, stable ids', () => {
     const ids = all.map((a) => a.level.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('has 120 Daily Holes, each with a look of its own', () => {
+    expect(DAILY_LEVELS.length).toBe(120);
+    for (const l of DAILY_LEVELS) expect(l.theme).toBeGreaterThanOrEqual(0);
   });
 });
 

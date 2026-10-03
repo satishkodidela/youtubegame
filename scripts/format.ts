@@ -17,6 +17,7 @@ export function formatWorld(world: WorldDef): string {
     if (lv.items.length) fields.push(`      "items": [\n${lv.items.map((it) => `        ${JSON.stringify(it)}`).join(',\n')}\n      ]`);
     else fields.push('      "items": []');
     fields.push(`      "hint": ${JSON.stringify(lv.hint)}`);
+    if (lv.theme !== undefined) fields.push(`      "theme": ${lv.theme}`);
     lines.push('    {');
     lines.push(fields.join(',\n'));
     lines.push(i < world.levels.length - 1 ? '    },' : '    }');

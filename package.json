@@ -11,12 +11,14 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "par": "vite-node scripts/par.ts",
+    "par": "tsx scripts/par.ts",
     "smoke": "node scripts/smoke.mjs",
     "perf": "node scripts/perf.mjs",
     "build:crazygames": "tsc --noEmit && vite build --mode crazygames",
     "smoke:crazygames": "node scripts/smoke-crazygames.mjs",
-    "promo": "node scripts/promo.mjs"
+    "promo": "node scripts/promo.mjs",
+    "difficulty": "tsx scripts/difficulty.ts",
+    "daily-gen": "tsx scripts/daily-gen.ts"
   },
   "dependencies": {
     "planck": "^1.5.0"
@@ -24,6 +26,7 @@
   "devDependencies": {
     "@types/node": "^22.20.5",
     "playwright": "^1.56.1",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.2",
     "vitest": "^5.0.3"

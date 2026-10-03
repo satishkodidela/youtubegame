@@ -1,6 +1,6 @@
 import { Game } from './game/game';
 import { emptySave, parseSave } from './game/save';
-import { WORLDS } from './levels';
+import { DAILY_LEVELS, WORLDS } from './levels';
 import { createPlatform } from './platform/platform';
 
 const platform = createPlatform();
@@ -9,7 +9,7 @@ window.addEventListener('error', () => platform.logError());
 window.addEventListener('unhandledrejection', () => platform.logError());
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
-const game = new Game(canvas, platform, WORLDS);
+const game = new Game(canvas, platform, WORLDS, DAILY_LEVELS);
 game.start();
 
 async function loadSave(): Promise<string | null> {

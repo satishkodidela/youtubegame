@@ -2,7 +2,7 @@ import { BALL_R, CUP_DEPTH, CUP_W, LINE_HALF, WORLD_H, WORLD_W, type LevelDef, t
 import { DEG, rectPoly } from '../sim/geometry';
 import { bouncerNormal, bouncerPoly, moverPose, spinnerAngle, staticSolids } from '../sim/shapes';
 import { GRAVITY, type BallView, type Sim } from '../sim/sim';
-import { INK, INK_GHOST, type Theme } from './theme';
+import { INK, INK_GHOST, type BallSkin, type InkSkin, type Theme } from './theme';
 
 // Draws a level in world space. The view maps world units to canvas pixels.
 
@@ -44,6 +44,9 @@ export interface SceneState {
   lowInk: boolean;
   /** The static layer (drawStatic) is already on the canvas, e.g. from a cached image. */
   staticDrawn?: boolean;
+  /** Cosmetics. Defaults to the classic ball and navy ink. */
+  ballSkin?: BallSkin;
+  ink?: InkSkin;
 }
 
 const WATER = '#2f9be0';
@@ -375,9 +378,10 @@ export function drawScene(ctx: CanvasRenderingContext2D, v: View, st: SceneState
   // Lines.
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+  const inkColor = st.ink?.color ?? INK;
   if (st.ghost && !st.line) {
     pathLine(ctx, v, st.ghost);
-    ctx.strokeStyle = INK_GHOST;
+    ctx.strokeStyle = st.ink?.ghost ?? INK_GHOST;
     ctx.lineWidth = LINE_HALF * 2 * s;
     ctx.stroke();
   }
@@ -391,10 +395,10 @@ export function drawScene(ctx: CanvasRenderingContext2D, v: View, st: SceneState
     ctx.translate(0, 0.05 * s);
     ctx.stroke();
     ctx.restore();
-    ctx.strokeStyle = st.lowInk && st.drawing ? '#c0392b' : INK;
+    ctx.strokeStyle = st.lowInk && st.drawing ? '#c0392b' : inkColor;
     ctx.stroke();
   } else if (line && line.length === 1) {
-    ctx.fillStyle = INK;
+    ctx.fillStyle = inkColor;
     ctx.beginPath();
     ctx.arc(X(line[0][0]), Y(line[0][1]), LINE_HALF * s, 0, Math.PI * 2);
     ctx.fill();
@@ -424,7 +428,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, v: View, st: SceneState
       x = b.x + (h.x - b.x) * k;
       y = b.y + (h.y + CUP_DEPTH - BALL_R - b.y) * k;
     }
-    drawBall(ctx, X(x), Y(y), BALL_R * s, b.angle, i);
+    drawBall(ctx, X(x), Y(y), BALL_R * s, b.angle, i, st.ballSkin);
   });
 
   if (st.dropCue) {
@@ -511,26 +515,108 @@ function nearestHole(level: LevelDef, x: number, y: number) {
 
 const BALL_TINTS = ['#ffffff', '#fff3c4'];
 
-export function drawBall(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, angle: number, index = 0): void {
-  const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r);
-  g.addColorStop(0, '#ffffff');
-  g.addColorStop(0.7, BALL_TINTS[index % BALL_TINTS.length]);
-  g.addColorStop(1, '#cfd8e8');
-  ctx.fillStyle = g;
+export function drawBall(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, angle: number, index = 0, skin?: BallSkin): void {
+  const style = skin?.style ?? 'classic';
+  const base = skin?.base ?? '#ffffff';
+  const light = skin?.light ?? '#ffffff';
+  const mark = skin?.mark ?? 'rgba(120,135,165,0.45)';
+  ctx.save();
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(31,42,68,0.35)';
-  ctx.lineWidth = Math.max(1, r * 0.08);
-  ctx.stroke();
-  // Dimples rotate with the ball so rolling reads at a glance.
-  ctx.fillStyle = 'rgba(120,135,165,0.45)';
-  for (let k = 0; k < 3; k++) {
-    const a = angle + (k * Math.PI * 2) / 3;
+  ctx.clip();
+  if (style === 'beach') {
+    // Six wedges that turn with the ball.
+    const cols = [base, light, mark];
+    for (let k = 0; k < 6; k++) {
+      ctx.fillStyle = cols[k % 3];
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.arc(x, y, r, angle + (k * Math.PI) / 3, angle + ((k + 1) * Math.PI) / 3);
+      ctx.closePath();
+      ctx.fill();
+    }
+    const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r);
+    g.addColorStop(0, 'rgba(255,255,255,0.75)');
+    g.addColorStop(0.5, 'rgba(255,255,255,0)');
+    g.addColorStop(1, 'rgba(0,0,0,0.18)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  } else {
+    const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r);
+    if (style === 'classic') {
+      g.addColorStop(0, '#ffffff');
+      g.addColorStop(0.7, BALL_TINTS[index % BALL_TINTS.length]);
+      g.addColorStop(1, '#cfd8e8');
+    } else if (style === 'flame') {
+      g.addColorStop(0, light);
+      g.addColorStop(0.55, base);
+      g.addColorStop(1, mark);
+    } else {
+      g.addColorStop(0, light);
+      g.addColorStop(0.65, base);
+      g.addColorStop(1, shade(base));
+    }
+    ctx.fillStyle = g;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  // Markings turn with the ball so rolling reads at a glance.
+  if (style === 'classic' || style === 'solid' || style === 'flame') {
+    ctx.fillStyle = mark;
+    for (let k = 0; k < 3; k++) {
+      const a = angle + (k * Math.PI * 2) / 3;
+      ctx.beginPath();
+      ctx.arc(x + Math.cos(a) * r * 0.5, y + Math.sin(a) * r * 0.5, r * 0.13, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (style === 'eight') {
+    const cx = x + Math.cos(angle) * r * 0.3;
+    const cy = y + Math.sin(angle) * r * 0.3;
+    ctx.fillStyle = mark;
     ctx.beginPath();
-    ctx.arc(x + Math.cos(a) * r * 0.5, y + Math.sin(a) * r * 0.5, r * 0.13, 0, Math.PI * 2);
+    ctx.arc(cx, cy, r * 0.42, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = base;
+    ctx.beginPath();
+    ctx.arc(cx, cy - r * 0.1, r * 0.11, 0, Math.PI * 2);
+    ctx.arc(cx, cy + r * 0.13, r * 0.14, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (style === 'tennis') {
+    ctx.strokeStyle = mark;
+    ctx.lineWidth = Math.max(1, r * 0.14);
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(x + Math.cos(angle) * r * 1.15 * side, y + Math.sin(angle) * r * 1.15 * side, r * 0.95, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  } else if (style === 'gold') {
+    const a = angle * 0.5;
+    const sx = x + Math.cos(a) * r * 0.3;
+    const sy = y + Math.sin(a) * r * 0.3;
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath();
+    for (let k = 0; k < 8; k++) {
+      const rr = k % 2 === 0 ? r * 0.32 : r * 0.1;
+      const t = angle + (k * Math.PI) / 4;
+      if (k === 0) ctx.moveTo(sx + Math.cos(t) * rr, sy + Math.sin(t) * rr);
+      else ctx.lineTo(sx + Math.cos(t) * rr, sy + Math.sin(t) * rr);
+    }
+    ctx.closePath();
     ctx.fill();
   }
+  ctx.restore();
+  ctx.strokeStyle = style === 'eight' ? 'rgba(0,0,0,0.5)' : 'rgba(31,42,68,0.35)';
+  ctx.lineWidth = Math.max(1, r * 0.08);
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+/** A darker copy of a hex colour, for the shaded rim of a ball. */
+function shade(hex: string): string {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!m) return hex;
+  const [r, g, b] = [m[1], m[2], m[3]].map((h) => Math.round(parseInt(h, 16) * 0.72));
+  return `rgb(${r},${g},${b})`;
 }
 
 function drawHint(ctx: CanvasRenderingContext2D, v: View, path: Pt[], t: number): void {
