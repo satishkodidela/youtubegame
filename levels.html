@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Level Overview</title>
+    <style>
+      :root { --bg: #f3f5fa; --ink: #1f2a44; }
+      body { margin: 0; padding: 12px; background: var(--bg); color: var(--ink); font: 13px system-ui, sans-serif; }
+      .grid { display: flex; flex-wrap: wrap; gap: 10px; }
+      figure { margin: 0; background: #fff; border-radius: 8px; padding: 6px; }
+      figcaption { padding-top: 4px; }
+      .bad { color: #c0392b; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <div id="root" class="grid"></div>
+    <script type="module" src="/src/editor/overview.ts"></script>
+  </body>
+</html>

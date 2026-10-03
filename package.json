@@ -1,0 +1,25 @@
+{
+  "name": "draw-to-hole",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Draw-to-Hole golf: a one-finger physics draw puzzle built for YouTube Playables.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "build:preview": "vite build --mode preview",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "par": "vite-node scripts/par.ts"
+  },
+  "dependencies": {
+    "planck": "^1.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
+  }
+}
