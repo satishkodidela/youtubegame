@@ -33,6 +33,18 @@ npm run par -- src/levels/w2-springs.json [ids...] [--write]   # level tuning to
 Dev-server shortcuts while playing: `[` and `]` change level, `h` shows the hint, `w` plays the
 hint, `r` retries and `Esc` pauses. These are compiled out of the builds.
 
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request into `main` and every push to `main`:
+
+| Check | What it runs |
+| --- | --- |
+| **Typecheck and tests** | `npm run typecheck`, `npm test` (unit tests plus the full level check) |
+| **Build and SDK smoke test** | `npm run build`, `npm run build:preview`, `npm run smoke`. It uploads both builds as a workflow artifact and reports bundle size |
+
+Make both checks required in **Settings → Rules → Rulesets** (or **Settings → Branches**) for
+`main`, so a pull request can't merge while either one fails.
+
 ## How it works
 
 | Path | What it is |
