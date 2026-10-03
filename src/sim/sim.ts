@@ -24,7 +24,7 @@ export const DT = 1 / 120;
 export const GRAVITY = 16;
 export const MAX_TIME = 14;
 const REST_SPEED = 0.07;
-const REST_TIME = 0.9;
+const REST_TIME = 0.6;
 
 const CAT_WORLD = 0x1;
 const CAT_LINE = 0x2;

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Level Editor</title>
+    <style>
+      :root {
+        --bg: #eef1f7;
+        --panel: #ffffff;
+        --ink: #1f2a44;
+        --muted: #6b7690;
+        --accent: #3d7bff;
+        --line: #d5dbe8;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme='light']) {
+          --bg: #141821;
+          --panel: #1e2430;
+          --ink: #e8ecf5;
+          --muted: #9aa5bd;
+          --line: #323a4b;
+        }
+      }
+      :root[data-theme='dark'] {
+        --bg: #141821;
+        --panel: #1e2430;
+        --ink: #e8ecf5;
+        --muted: #9aa5bd;
+        --line: #323a4b;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.4 system-ui, sans-serif; }
+      .wrap { display: flex; gap: 12px; padding: 12px; align-items: flex-start; flex-wrap: wrap; }
+      .stage { background: var(--panel); border-radius: 10px; padding: 8px; }
+      canvas { display: block; touch-action: none; border-radius: 6px; cursor: crosshair; }
+      .side { flex: 1; min-width: 300px; max-width: 520px; display: flex; flex-direction: column; gap: 10px; }
+      .card { background: var(--panel); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+      .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+      h2 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+      button, select, input { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; }
+      button { cursor: pointer; }
+      button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+      input[type='number'] { width: 70px; }
+      textarea { width: 100%; min-height: 120px; font: 12px/1.35 ui-monospace, monospace; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+      #status { color: var(--muted); min-height: 1.4em; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="stage"><canvas id="c"></canvas></div>
+      <div class="side">
+        <div class="card">
+          <h2>Level</h2>
+          <div class="row">
+            <select id="pick"></select>
+            <button id="new">New</button>
+          </div>
+          <div class="row">
+            id <input id="lid" style="width: 90px" />
+            ink <input id="ink" type="number" step="0.1" />
+            ★★★ ≤ <input id="s3" type="number" step="0.1" />
+            ★★ ≤ <input id="s2" type="number" step="0.1" />
+          </div>
+        </div>
+        <div class="card">
+          <h2>Tools</h2>
+          <div class="row" id="tools">
+            <button data-tool="select" class="on">Move</button>
+            <button data-tool="draw">Draw &amp; test</button>
+          </div>
+          <div class="row" id="adds">
+            <button data-add="box">+ Box</button>
+            <button data-add="ramp">+ Ramp</button>
+            <button data-add="bouncer">+ Spring</button>
+            <button data-add="water">+ Water</button>
+            <button data-add="mover">+ Mover</button>
+            <button data-add="spinner">+ Spinner</button>
+            <button data-add="wind">+ Wind</button>
+            <button data-add="ball">+ Ball</button>
+            <button data-add="hole">+ Hole</button>
+          </div>
+          <div class="row">
+            <button id="del">Delete selected</button>
+            <button id="hint">Play hint</button>
+            <button id="solve">Auto-tune (solver)</button>
+          </div>
+          <div id="status"></div>
+        </div>
+        <div class="card">
+          <h2>Selected</h2>
+          <textarea id="sel" spellcheck="false" placeholder="Click an object"></textarea>
+          <div class="row"><button id="apply">Apply</button></div>
+        </div>
+        <div class="card">
+          <h2>Export</h2>
+          <textarea id="out" spellcheck="false"></textarea>
+          <div class="row"><button id="copy">Copy JSON</button> <button id="import">Load from text</button></div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/editor/editor.ts"></script>
+  </body>
+</html>

@@ -1,4 +1,4 @@
-import { starsFor, type LevelDef, type Pt, type WorldDef } from '../levels/types';
+import { WORLD_W, starsFor, type LevelDef, type Pt, type WorldDef } from '../levels/types';
 import { dist, polylineLength } from '../sim/geometry';
 import { DT, Sim, type SimEvent } from '../sim/sim';
 import { Stroke, traceStroke } from '../sim/stroke';
@@ -608,19 +608,26 @@ export class Game {
     const open = unlockedMask(this.levels, this.save);
     const firstIdx = this.levels.findIndex((r) => r.world === wi);
 
-    // Header: home, world switcher, world stars.
+    // Header: home, world switcher (world number badge + stars), arrows.
     const hy = this.hudH / 2 + 4;
-    this.button(size * 0.75, hy, size * 0.85, 'home', () => this.goTitle());
+    const [hl] = this.hudSpan();
+    this.button(hl + size * 0.75, hy, size * 0.85, 'home', () => this.goTitle());
     const cx = this.W / 2;
-    if (wi > 0) this.button(cx - size * 1.9, hy, size * 0.8, 'left', () => (this.selectWorld = wi - 1), 'light');
-    if (wi < this.worlds.length - 1) this.button(cx + size * 1.9, hy, size * 0.8, 'right', () => (this.selectWorld = wi + 1), 'light');
-    ctx.fillStyle = THEMES[wi % THEMES.length].ground;
-    roundRect(ctx, cx - size * 1.2, hy - size * 0.5, size * 2.4, size, size * 0.5);
+    if (wi > 0) this.button(cx - size * 2.05, hy, size * 0.8, 'left', () => (this.selectWorld = wi - 1), 'light');
+    if (wi < this.worlds.length - 1) this.button(cx + size * 2.05, hy, size * 0.8, 'right', () => (this.selectWorld = wi + 1), 'light');
+    const theme = THEMES[wi % THEMES.length];
+    ctx.fillStyle = theme.ground;
+    roundRect(ctx, cx - size * 1.4, hy - size * 0.5, size * 2.8, size, size * 0.5);
     ctx.fill();
+    ctx.fillStyle = theme.top;
+    ctx.beginPath();
+    ctx.arc(cx - size * 0.95, hy, size * 0.36, 0, Math.PI * 2);
+    ctx.fill();
+    this.text(`${wi + 1}`, cx - size * 0.95, hy + 1, size * 0.42, UI_DARK);
     let got = 0;
     for (const lv of world.levels) got += this.save.stars[lv.id] ?? 0;
-    drawStar(ctx, cx - size * 0.62, hy, size * 0.24, STAR_ON);
-    this.text(`${got}/${world.levels.length * 3}`, cx - size * 0.3, hy + 1, size * 0.36, UI_LIGHT, 'left');
+    drawStar(ctx, cx - size * 0.3, hy, size * 0.22, STAR_ON);
+    this.text(`${got}/${world.levels.length * 3}`, cx - size * 0.02, hy + 1, size * 0.34, UI_LIGHT, 'left');
 
     // Grid of levels.
     const top = this.hudH + 16;
@@ -685,21 +692,28 @@ export class Game {
     if (this.paused) this.renderPause();
   }
 
+  /** Left and right edge of the HUD: the full width on phones, a column over the playfield on wide screens. */
+  private hudSpan(): [number, number] {
+    const colW = Math.min(this.W, Math.max(380, WORLD_W * this.view.s + 120));
+    return [(this.W - colW) / 2, (this.W + colW) / 2];
+  }
+
   private renderHud(): void {
     const ctx = this.ctx;
     const level = this.level;
     const size = this.btnSize() * 0.85;
     const hy = this.hudH / 2 + 2;
-    this.button(size * 0.8, hy, size, 'pause', () => (this.paused = true));
-    this.button(this.W - size * 0.8, hy, size, 'retry', () => this.resetAttempt());
+    const [hl, hr] = this.hudSpan();
+    this.button(hl + size * 0.8, hy, size, 'pause', () => (this.paused = true));
+    this.button(hr - size * 0.8, hy, size, 'retry', () => this.resetAttempt());
     if (this.failCount >= HINT_AFTER_FAILS && this.phase === 'draw' && !this.hint) {
-      this.button(this.W - size * 2.1, hy, size * 0.85, 'hint', () => (this.hint = { path: level.hint, t: 0 }));
+      this.button(hr - size * 0.8, hy + size * 1.25, size * 0.85, 'hint', () => (this.hint = { path: level.hint, t: 0 }));
     }
 
     // Ink meter with star thresholds.
     const used = this.stroke ? this.stroke.length : this.phase === 'draw' ? 0 : this.inkUsed;
     const frac = Math.max(0, 1 - used / level.ink);
-    const mw = Math.min(this.W - size * 5.2, 300);
+    const mw = Math.min(hr - hl - size * 3.6, 300);
     const mh = Math.max(12, size * 0.32);
     const mx = this.W / 2 - mw / 2;
     const my = hy + size * 0.12;
