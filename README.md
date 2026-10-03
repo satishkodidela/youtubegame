@@ -1,7 +1,8 @@
 # Draw to Hole
 
-A one-finger physics puzzle built for **YouTube Playables**. Draw one line, lift your finger, and
-the ball drops and rolls. Get it in the hole. Less ink earns more stars.
+A one-finger physics puzzle built for **YouTube Playables** and **CrazyGames**. Draw one line, lift
+your finger, and the ball drops and rolls. Get it in the hole. Less ink earns more stars. The same
+game code ships to both: each build includes only its own platform's SDK code.
 
 - 60 levels in 5 worlds of 12, each world adding one idea:
   1. **Meadow**: ramps, walls and gaps
@@ -21,14 +22,16 @@ the ball drops and rolls. Get it in the hole. Less ink earns more stars.
 npm install
 npm run dev            # play at http://localhost:5173, editor at /editor.html, all levels at /levels.html
 npm test               # unit tests and the full level check (every level, every hint)
-npm run build          # YouTube Playables bundle -> dist/
-npm run build:preview  # one self-contained HTML file -> dist-preview/index.html (saves to localStorage)
-npm run smoke          # runs dist/ against a mock Playables SDK (needs `npm run build` first)
+npm run build             # YouTube Playables bundle -> dist/
+npm run build:crazygames  # CrazyGames bundle -> dist-crazygames/
+npm run build:preview     # one self-contained HTML file -> dist-preview/index.html (saves to localStorage)
+npm run smoke             # runs dist/ against a mock Playables SDK (needs `npm run build` first)
+npm run smoke:crazygames  # runs dist-crazygames/ against a mock CrazyGames SDK (needs `npm run build:crazygames`)
 npm run par -- src/levels/w2-springs.json [ids...] [--write]   # level tuning tool, see below
 npm run perf           # frame-rate benchmark on a simulated low-end phone (needs `npm run build:preview` first)
 ```
 
-`npm run smoke` uses Playwright's Chromium. If Playwright has no browser installed, run
+The smoke tests use Playwright's Chromium. If Playwright has no browser installed, run
 `npx playwright install chromium`, or point `CHROMIUM_PATH` at an existing Chromium.
 
 Dev-server shortcuts while playing: `[` and `]` change level, `h` shows the hint, `w` plays the
@@ -41,7 +44,7 @@ hint, `r` retries and `Esc` pauses. These are compiled out of the builds.
 | Check | What it runs |
 | --- | --- |
 | **Typecheck and tests** | `npm run typecheck`, `npm test` (unit tests plus the full level check) |
-| **Build and SDK smoke test** | `npm run build`, `npm run build:preview`, `npm run smoke`. It uploads both builds as a workflow artifact and reports bundle size |
+| **Build and SDK smoke test** | All three builds, then `npm run smoke` and `npm run smoke:crazygames`. It uploads each build as a downloadable artifact (`youtube-playables-build`, `crazygames-build`, `preview-build`) and reports bundle sizes |
 
 Make both checks required in **Settings → Rules → Rulesets** (or **Settings → Branches**) for
 `main`, so a pull request can't merge while either one fails.
@@ -53,7 +56,7 @@ Make both checks required in **Settings → Rules → Rulesets** (or **Settings 
 | `src/sim/` | Physics and rules, with no DOM access, so tests and tools run them headless. `sim.ts` (Planck.js world, fixed 120 Hz step), `stroke.ts` (drawing rules), `shapes.ts` (geometry shared by physics, drawing and rendering), `solver.ts` (par finder) |
 | `src/game/` | `game.ts` (screens, input, HUD), `save.ts` (versioned save), `progress.ts` (unlocks), `audio.ts` (synthesised sound) |
 | `src/render/` | Canvas 2D drawing: scene, icons, per-world themes |
-| `src/platform/` | The only code that talks to YouTube. `platform.ts` wraps the `ytgame` SDK |
+| `src/platform/` | The only code that talks to a host. `platform.ts` has one adapter per platform (YouTube `ytgame`, CrazyGames SDK v3, plain web), and the build flags keep only the right one |
 | `src/levels/*.json` | Level data, one file per world |
 | `src/editor/` | Dev-only level editor and overview pages (never bundled) |
 | `scripts/` | `par.ts` (tuning), `smoke.mjs` (SDK check), `format.ts` (JSON layout) |
@@ -128,9 +131,9 @@ the hint needs more ink than the 3-star threshold, or if a ball starts inside so
 
 ## YouTube Playables integration
 
-`index.html` has an `<!--YT_SDK-->` slot. The Playables build fills it with
-`<script src="https://www.youtube.com/game_api/v1">` as the **first script** on the page, and the
-preview and dev builds leave it empty.
+`index.html` has a `<!--PLATFORM_SDK-->` slot. The Playables build fills it with
+`<script src="https://www.youtube.com/game_api/v1">` as the **first script** on the page. The
+CrazyGames build fills it with its own SDK, and the preview and dev builds leave it empty.
 
 | Requirement | Where it's handled |
 | --- | --- |
@@ -160,3 +163,37 @@ The code can't do these steps for you:
 
 The SDK typings in `src/platform/ytgame.d.ts` cover only what the game uses. They were written from
 the public reference, so check them against the current docs before you submit.
+
+## CrazyGames integration
+
+`npm run build:crazygames` writes `dist-crazygames/`, which loads
+`https://sdk.crazygames.com/crazygames-sdk-v3.js` first. To upload it, zip the **contents** of that
+folder so `index.html` sits at the top of the zip. You can also download the `crazygames-build`
+artifact from any CI run on `main`.
+
+| What CrazyGames looks for | How the game does it |
+| --- | --- |
+| SDK initialised before use | `SDK.init()` runs first, and nothing else is called until it resolves |
+| Loading events | `loadingStart` after init, then `loadingStop` once the save is loaded and the game is playable |
+| Gameplay events | `gameplayStart` while a level is being played. `gameplayStop` on the title, level select, pause menu and win card. Only changes are reported |
+| Progress save | Through the **Data Module** (`SDK.data`), synced to the player's CrazyGames account. Same save format and versioning as YouTube |
+| Mute through the SDK | Follows `SDK.game.settings.muteAudio`, including live changes. No AudioContext is created while muted |
+| Celebrations | `happytime()` on every 3-star win |
+| Works outside CrazyGames | If the SDK can't load or `init()` fails, the game falls back to localStorage and still runs |
+
+**Submission form answers for this build:**
+
+- **Does your game save progress?** Yes, using the Data Module from the CrazyGames SDK. The Data
+  Module only works once this option is selected.
+- **The game supports mobile devices:** checked.
+- **Mobile orientation:** PORTRAIT. The playfield is 10 × 14, so it gets small on a phone held
+  sideways. Desktop is unaffected.
+- **Online multiplayer:** unchecked.
+- **Supports CrazyGames muting audio through SDK:** checked.
+
+Ads aren't integrated yet. The SDK's `ad.requestAd` would be the place to add them, and audio and
+gameplay would need to pause while an ad plays.
+
+The CrazyGames typings in `src/platform/crazygames.d.ts` cover only what the game uses. The
+CrazyGames docs couldn't be reached from the build environment, so they were checked against two
+published SDK integrations. Compare them with the current docs before you submit.

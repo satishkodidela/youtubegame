@@ -139,6 +139,7 @@ export class Game {
       cancelAnimationFrame(this.rafId);
       this.rafId = 0;
       this.cancelStroke();
+      this.platform.setGameplay(false);
     } else {
       this.lastNow = performance.now();
       if (!this.rafId) this.rafId = requestAnimationFrame((t) => this.frame(t));
@@ -181,6 +182,7 @@ export class Game {
     this.lastNow = now;
     this.trackFrameTime(dt * 1000);
     this.update(dt);
+    this.platform.setGameplay(this.screen === 'play' && !this.paused && this.phase !== 'won');
     this.render();
     this.rafId = requestAnimationFrame((t) => this.frame(t));
   }
@@ -271,6 +273,7 @@ export class Game {
     this.result = { stars };
     this.starsPopped = 0;
     if (changed) this.persist();
+    if (stars === 3) this.platform.celebrate();
     this.sfx.win(stars);
     this.failCount = 0;
   }
