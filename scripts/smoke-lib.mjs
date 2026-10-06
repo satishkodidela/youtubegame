@@ -47,15 +47,18 @@ export async function waitFor(page, pred, ms = 6000) {
   return pred();
 }
 
+/** The game's screen, level id and play phase, as it mirrors them onto the canvas for tests. */
+export const state = (page) => page.evaluate(() => ({ ...document.querySelector('canvas').dataset }));
+
 /** Draws level 1's ramp (a 3-star line) and lets the ball roll in. */
-export async function drawLevelOneRamp(page) {
+export async function drawLevelOneRamp(page, { wait = 3500 } = {}) {
   const v = viewFor(W, H);
   const pts = [[1.4, 3.4], [4, 6.8], [5.75, 8.6]].map(([x, y]) => [v.ox + x * v.s, v.oy + y * v.s]);
   await page.mouse.move(pts[0][0], pts[0][1]);
   await page.mouse.down();
   for (const [x, y] of pts.slice(1)) await page.mouse.move(x, y, { steps: 25 });
   await page.mouse.up();
-  await page.waitForTimeout(3500);
+  await page.waitForTimeout(wait);
 }
 
 /** Plays level 1: taps Play first for a returning player; a new player is already in the level. */

@@ -15,8 +15,8 @@ game code ships to both: each build includes only its own platform's SDK code.
   of each world shows a one-line tip about its new idea. The few words on screen (button labels,
   win headlines, tips) are all in `src/game/strings.ts`, ready for translation.
 - Retry is instant: tap during a roll to start over. The last line stays as a faint ghost so you can
-  adjust it. A win card moves on by itself after about 2 seconds; tapping it keeps it open to retry
-  for 3 stars.
+  adjust it. A win card moves on by itself after about 2 seconds (a little longer when it shows a
+  new look), and a tap moves on straight away. Its retry button gives another go at 3 stars.
 - Help before frustration: after 2 misses on the first 15 levels (3 later) a hint button shows a
   line that's known to work, and after 4 misses a skip button appears (the unlock rules always
   allowed skipping 2 levels; now players can see it).

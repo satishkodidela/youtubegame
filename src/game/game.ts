@@ -54,8 +54,11 @@ const HINT_AFTER_FAILS = 3;
 const EARLY_LEVELS = 15;
 /** Misses before the skip button appears (the unlock rules already let a player skip 2 levels). */
 const SKIP_AFTER_FAILS = 4;
-/** Seconds the win card waits before moving on by itself. Any tap on the card keeps it. */
+/** Seconds the win card waits before moving on by itself; longer when it shows a new look. */
 const AUTO_NEXT = 1.8;
+const AUTO_NEXT_UNLOCK = 3.5;
+/** A card ignores taps for this long after it appears, so a double tap can't skip it unseen. */
+const CARD_TAP_DELAY = 0.5;
 /** Ink within this much of the hint's length earns the gold-ink medal. */
 const GOLD_SLACK = 0.05;
 const MAX_STEPS_PER_FRAME = 12;
@@ -140,6 +143,8 @@ export class Game {
   private hintUsed = false;
   private result = { stars: 0, gold: false, starsFrom: 0, starsTo: 0, unlocks: [] as Cosmetic[] };
   private autoNext = false;
+  /** Seconds the current win card waits before moving on (AUTO_NEXT or AUTO_NEXT_UNLOCK). */
+  private autoNextAfter = AUTO_NEXT;
   /** Shown instead of the win card once a world's last level is done. */
   private worldDone: { world: number; t: number } | null = null;
   private paused = false;
@@ -211,6 +216,12 @@ export class Game {
     this.screen = s;
     // Lets tests and tools see where the game is without reading pixels.
     this.canvas.dataset.screen = s;
+  }
+
+  private setPhase(p: Phase): void {
+    this.phase = p;
+    this.phaseTime = 0;
+    this.canvas.dataset.phase = p;
   }
 
   private setSystemPaused(p: boolean): void {
@@ -371,6 +382,7 @@ export class Game {
 
   private beginPlay(): void {
     this.setScreen('play');
+    this.canvas.dataset.level = this.level.id;
     this.fade = 1;
     this.paused = false;
     this.line = null;
@@ -387,8 +399,7 @@ export class Game {
 
   private resetAttempt(): void {
     if (this.line) this.ghost = this.line;
-    this.phase = 'draw';
-    this.phaseTime = 0;
+    this.setPhase('draw');
     this.sim = null;
     this.line = null;
     this.stroke = null;
@@ -402,16 +413,14 @@ export class Game {
     this.line = line;
     this.inkUsed = line ? polylineLength(line) : 0;
     this.sim = new Sim(this.level, line);
-    this.phase = 'roll';
-    this.phaseTime = 0;
+    this.setPhase('roll');
     this.acc = 0;
     this.trails = this.level.balls.map(() => []);
     this.squash = this.level.balls.map(() => 0);
   }
 
   private onWin(): void {
-    this.phase = 'won';
-    this.phaseTime = 0;
+    this.setPhase('won');
     const level = this.level;
     const stars = starsFor(level, this.inkUsed);
     const starsFrom = totalStars(this.save);
@@ -431,14 +440,15 @@ export class Game {
     this.sfx.win(stars);
     if (unlocks.length) this.sfx.unlockJingle();
     this.failCount = 0;
-    // Move on by itself unless there is something to look at: a finished world or a new unlock.
+    // Move on by itself, a little later when there is a new look to see. After a world's last level
+    // that leads to the world card, which then waits for a tap.
     const n = this.cur + 1;
-    this.autoNext = this.mode === 'campaign' && !this.isLastOfWorld() && n < this.levels.length && unlockedMask(this.levels, this.save)[n] && unlocks.length === 0;
+    this.autoNext = this.mode === 'campaign' && (this.isLastOfWorld() || (n < this.levels.length && unlockedMask(this.levels, this.save)[n]));
+    this.autoNextAfter = unlocks.length ? AUTO_NEXT_UNLOCK : AUTO_NEXT;
   }
 
   private onFail(): void {
-    this.phase = 'failed';
-    this.phaseTime = 0;
+    this.setPhase('failed');
     this.failCount++;
     this.sfx.fail();
     // Say what went wrong, just above the ball.
@@ -469,6 +479,20 @@ export class Game {
     const open = unlockedMask(this.levels, this.save);
     if (n < this.levels.length && open[n]) this.openLevel(n);
     else this.goSelect(this.ref.world);
+  }
+
+  /** From the world card: on to the next world's first level, or to the looks after the last world. */
+  private leaveWorldDone(): void {
+    const wd = this.worldDone;
+    if (!wd) return;
+    const next = wd.world + 1;
+    if (next >= this.worlds.length) {
+      this.goLooks();
+      return;
+    }
+    const first = this.levels.findIndex((r) => r.world === next);
+    if (unlockedMask(this.levels, this.save)[first]) this.openLevel(first);
+    else this.goSelect(next);
   }
 
   /** Leaves a level the player is stuck on. The unlock rules already allow two unsolved levels. */
@@ -565,9 +589,17 @@ export class Game {
       return;
     }
     if (this.screen !== 'play' || this.paused || this.pointerId !== null) return;
+    if (this.worldDone) {
+      // A tap on the world card (outside its buttons) goes on to the next world.
+      if (this.worldDone.t > CARD_TAP_DELAY) this.leaveWorldDone();
+      return;
+    }
     if (this.phase === 'won') {
-      // A tap anywhere on the win card keeps it open, for a retry or a look at the stars.
-      this.autoNext = false;
+      // The ball is in. A tap during the celebration brings the card up now; a tap on the card
+      // (outside its buttons) moves on. Retry has its own button.
+      const t = this.phaseTime - WIN_CARD_DELAY;
+      if (t < 0) this.phaseTime = WIN_CARD_DELAY;
+      else if (t > CARD_TAP_DELAY) this.nextLevel();
       return;
     }
     // Starting over while the ball is still rolling is a miss the player saw coming.
@@ -692,7 +724,7 @@ export class Game {
         this.showered = true;
         this.confettiShower();
       }
-      if (this.autoNext && t >= AUTO_NEXT) this.nextLevel();
+      if (this.autoNext && t >= this.autoNextAfter) this.nextLevel();
     }
   }
 
@@ -1563,8 +1595,8 @@ export class Game {
         this.button(cx - cw / 2 + size * 2.15, by, size, 'grid', () => this.goSelect(this.ref.world));
         this.pill(nx, by, nw, nh, T.next, 'next', () => this.nextLevel(), 'primary');
         if (this.autoNext) {
-          // The button fills while the card waits; a tap anywhere else keeps the card.
-          const f = Math.max(0, Math.min(1, t / AUTO_NEXT));
+          // The button fills while the card waits to move on by itself.
+          const f = Math.max(0, Math.min(1, t / this.autoNextAfter));
           ctx.save();
           roundRect(ctx, nx - nw / 2, by - nh / 2, nw, nh, nh / 2);
           ctx.clip();
@@ -1668,11 +1700,8 @@ export class Game {
     this.button(cx - cw / 2 + size * 2.15, by, size, 'grid', () => this.goSelect(next < this.worlds.length ? next : wd.world));
     const nw = Math.min(size * 3, cw - size * 3.3);
     const nx = cx + cw / 2 - size * 0.45 - nw / 2;
-    if (next < this.worlds.length) {
-      const first = this.levels.findIndex((r) => r.world === next);
-      const open = unlockedMask(this.levels, this.save);
-      this.pill(nx, by, nw, size * 1.05, T.next, 'next', () => (open[first] ? this.openLevel(first) : this.goSelect(next)), 'primary');
-    } else this.pill(nx, by, nw, size * 1.05, T.looks, 'palette', () => this.goLooks(), 'primary');
+    if (next < this.worlds.length) this.pill(nx, by, nw, size * 1.05, T.next, 'next', () => this.leaveWorldDone(), 'primary');
+    else this.pill(nx, by, nw, size * 1.05, T.looks, 'palette', () => this.goLooks(), 'primary');
   }
 
   private renderPause(): void {

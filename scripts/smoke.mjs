@@ -5,7 +5,7 @@
 //   SDK load order, firstFrameReady -> loadData -> gameReady, cloud save after a win,
 //   sendScore, pause/resume freezing the game, the audio setting, no outside network calls,
 //   no errors, and that an unreadable save is never overwritten.
-import { audioContexts, calls, playLevelOne, smoke, snap } from './smoke-lib.mjs';
+import { audioContexts, calls, drawLevelOneRamp, H, playLevelOne, smoke, snap, state, W, waitFor } from './smoke-lib.mjs';
 
 // Records every SDK call in window.__calls. Behaviour is configured through window.__mock.
 const MOCK_SDK = `
@@ -93,6 +93,22 @@ await smoke({
         const score = c.filter((x) => x.name === 'sendScore').pop();
         check(score?.arg === 5, `score is the new total (${score?.arg})`);
         check((await audioContexts(page)) === 1, 'audio starts after a tap when YouTube audio is on');
+      },
+    },
+    {
+      label: 'tapping through a win',
+      mock: { audio: false },
+      async fn(page, check) {
+        // A tap as the ball drops in (a common reflex) must not stop the game moving on.
+        await drawLevelOneRamp(page, { wait: 0 });
+        const won = await waitFor(page, async () => (await state(page)).phase === 'won', 6000);
+        check(won, 'level 1 is won');
+        await page.mouse.click(W / 2, H * 0.3); // brings the card up at once
+        await page.waitForTimeout(650);
+        await page.mouse.click(W / 2, H * 0.3); // a tap on the card, away from its buttons, moves on
+        const next = await waitFor(page, async () => (await state(page)).level !== 'm01', 500);
+        const s = await state(page);
+        check(next && s.screen === 'play' && s.phase === 'draw', `taps through the win card lead straight on to level 2 (${JSON.stringify(s)})`);
       },
     },
     {
