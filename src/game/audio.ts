@@ -1,7 +1,23 @@
-// Synthesised sound effects (no audio files to ship). Sound plays only when both YouTube's audio
-// setting and the in-game toggle allow it, and the context is suspended while the game is paused.
+// Synthesised sound effects and music (no audio files to ship). Sound plays only when both the
+// platform's audio setting and the in-game toggle allow it, and the context is suspended while the
+// game is paused.
 
 type Ctx = AudioContext;
+
+// Background music: a soft eight-bar arpeggio over C - Am - F - G, one note per eighth.
+const NOTE: Record<string, number> = {
+  F2: 87.31, G2: 98.0, A2: 110.0, C3: 130.81,
+  E4: 329.63, F4: 349.23, G4: 392.0, A4: 440.0, B4: 493.88, C5: 523.25, D5: 587.33, E5: 659.25,
+};
+const MELODY = [
+  'C5 - G4 - E4 - G4 -', 'A4 - E4 - C5 - E4 -', 'A4 - F4 - C5 - F4 -', 'B4 - G4 - D5 - G4 B4',
+  'E5 - C5 - G4 - C5 -', 'E5 - C5 - A4 - C5 -', 'C5 - A4 - F4 - A4 C5', 'D5 - B4 - G4 - - -',
+].flatMap((bar) => bar.split(' '));
+const BASS = ['C3', 'A2', 'F2', 'G2'];
+/** Seconds per eighth note (100 beats a minute). */
+const EIGHTH = 0.3;
+/** How far ahead notes are scheduled, so a slow frame never leaves a gap. */
+const LOOKAHEAD = 0.5;
 
 export class Sfx {
   private ctx: Ctx | null = null;
@@ -10,6 +26,9 @@ export class Sfx {
   private scratch: { src: AudioBufferSourceNode; gain: GainNode; filter: BiquadFilterNode } | null = null;
   private enabled = true;
   private paused = false;
+  private music: GainNode | null = null;
+  private musicStep = 0;
+  private musicAt = 0;
 
   /** Must be called from a user gesture (browsers block audio until then). */
   unlock(): void {
@@ -95,6 +114,45 @@ export class Sfx {
     src.connect(f).connect(g).connect(this.master);
     src.start(t, Math.random() * 0.5);
     src.stop(t + dur + 0.02);
+  }
+
+  /** Keeps the background music going: call every frame. Schedules the next half second of notes. */
+  musicTick(): void {
+    const ctx = this.ready();
+    if (!ctx || !this.master) return;
+    if (!this.music) {
+      const soft = ctx.createBiquadFilter();
+      soft.type = 'lowpass';
+      soft.frequency.value = 2200;
+      this.music = ctx.createGain();
+      this.music.gain.value = 0.2;
+      this.music.connect(soft).connect(this.master);
+      this.musicAt = ctx.currentTime + 0.2;
+    }
+    // After the tab was hidden or the game paused for long, pick up from now instead of catching up.
+    if (this.musicAt < ctx.currentTime) this.musicAt = ctx.currentTime + 0.05;
+    while (this.musicAt < ctx.currentTime + LOOKAHEAD) {
+      const step = this.musicStep;
+      const note = NOTE[MELODY[step]];
+      if (note) this.pluck(ctx, note, this.musicAt, 0.55, 'triangle', 0.22);
+      if (step % 4 === 0) this.pluck(ctx, NOTE[BASS[Math.floor(step / 8) % BASS.length]], this.musicAt, 0.9, 'sine', 0.3);
+      this.musicStep = (step + 1) % MELODY.length;
+      this.musicAt += EIGHTH;
+    }
+  }
+
+  private pluck(ctx: Ctx, freq: number, t: number, dur: number, type: OscillatorType, vol: number): void {
+    if (!this.music) return;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = type;
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(this.music);
+    o.start(t);
+    o.stop(t + dur + 0.02);
   }
 
   click(): void {
