@@ -10,12 +10,13 @@ game code ships to both: each build includes only its own platform's SDK code.
   3. **Lagoon**: water, where a splash means a retry
   4. **Workshop**: moving platforms, lifts and spinning bars, where the line also sets the timing
   5. **Gusts**: wind zones and updrafts, then two-ball levels
-- The UI has no text, so nothing needs translating. Level 1 teaches itself with a ghost finger that
-  draws the answer, and a first session lands straight in it: the title screen waits until there
-  is something to come back to.
+- Level 1 teaches itself with a ghost finger that draws the answer, and a first session lands
+  straight in it: the title screen waits until there is something to come back to. The first level
+  of each world shows a one-line tip about its new idea. The few words on screen (button labels,
+  win headlines, tips) are all in `src/game/strings.ts`, ready for translation.
 - Retry is instant: tap during a roll to start over. The last line stays as a faint ghost so you can
-  adjust it. A win card moves on by itself after about 2 seconds; tapping it keeps it open to retry
-  for 3 stars.
+  adjust it. A win card moves on by itself after about 2 seconds (a little longer when it shows a
+  new look), and a tap moves on straight away. Its retry button gives another go at 3 stars.
 - Help before frustration: after 2 misses on the first 15 levels (3 later) a hint button shows a
   line that's known to work, and after 4 misses a skip button appears (the unlock rules always
   allowed skipping 2 levels; now players can see it).
@@ -28,6 +29,11 @@ game code ships to both: each build includes only its own platform's SDK code.
   Once a level has 3 stars, the ink meter shows where that line ends.
 - Progress is always in view: holes done per world on the level grid and the win card, the star
   total counting up after every win, and a preview of the next world when one is finished.
+- Look and feel: each world has its own scenery (trees, mushrooms, palms and the sea, factories,
+  snowy mountains), the ground, grass, water and hazards are textured and shaded, and the UI uses a
+  bundled rounded font with labelled buttons. The ball leaves a trail and squashes when it lands,
+  play slows for a moment when it drops in, a miss pops a short word (SPLASH!, MISSED!), a 3-star
+  finish rains confetti, and a quiet synthesised music loop plays under the sound effects.
 
 ## Commands
 
@@ -72,12 +78,12 @@ Make both checks required in **Settings → Rules → Rulesets** (or **Settings 
 | Path | What it is |
 | --- | --- |
 | `src/sim/` | Physics and rules, with no DOM access, so tests and tools run them headless. `sim.ts` (Planck.js world, fixed 120 Hz step), `stroke.ts` (drawing rules), `shapes.ts` (geometry shared by physics, drawing and rendering), `solver.ts` (par finder), `beginner.ts` (a modelled first-time player, for the difficulty curve) |
-| `src/game/` | `game.ts` (screens, input, HUD), `save.ts` (versioned save), `progress.ts` (unlocks), `daily.ts` (Daily Hole and streak), `cosmetics.ts` (skins and unlock rules), `audio.ts` (synthesised sound) |
-| `src/render/` | Canvas 2D drawing: scene, icons, per-world themes and the skin types |
+| `src/game/` | `game.ts` (screens, input, HUD), `save.ts` (versioned save), `progress.ts` (unlocks), `daily.ts` (Daily Hole and streak), `cosmetics.ts` (skins and unlock rules), `audio.ts` (synthesised sound and music), `strings.ts` (every word on screen) |
+| `src/render/` | Canvas 2D drawing: scene, icons, logo, per-world themes and the skin types, and the bundled Fredoka font (`src/assets/fonts`, SIL Open Font License) |
 | `src/platform/` | The only code that talks to a host. `platform.ts` has one adapter per platform (YouTube `ytgame`, CrazyGames SDK v3, plain web), and the build flags keep only the right one |
 | `src/levels/*.json` | Level data, one file per world, plus `daily.json` (generated) |
 | `src/editor/` | Dev-only level editor and overview pages (never bundled) |
-| `scripts/` | `par.ts` (tuning), `difficulty.ts` (difficulty curve), `daily-gen.ts` (Daily Hole generator), `smoke.mjs` (SDK check), `format.ts` (JSON layout) |
+| `scripts/` | `par.ts` (tuning), `difficulty.ts` (difficulty curve), `daily-gen.ts` (Daily Hole generator), `smoke.mjs` and `smoke-crazygames.mjs` (SDK checks), `perf.mjs` (frame rate), `promo.mjs` (store art), `format.ts` (JSON layout) |
 
 **Determinism.** Nothing moves while you draw. The physics world is built when the ball is released
 and steps at exactly 1/120 s, and moving parts use polynomial motion with no `sin`/`cos`. So the
@@ -93,11 +99,14 @@ zero-thickness Box2D chain, which is smooth and can't tunnel. The ball has a mas
 that collides only with lines, so it rests exactly on the visible edge of the line.
 
 **Performance on low-end phones.** Painting pixels is the cost, not JavaScript: frame time scales with
-canvas size. The sky, hills, clouds and everything in a level that never moves are painted once into
-a cached image that is copied each frame, and only moving things (ball, line, water surface, wind
-streaks, flags, moving parts) are drawn per frame. If frames stay slow (median over 22 ms), the game
-steps its resolution down from 2× towards 1× pixel density. `npm run perf` measures this: with the
-CPU slowed 6× at 390×844 and 2× density, the busiest levels went from about 13 fps to 36–48 fps.
+canvas size. The sky, scenery and everything in a level that never moves (including the textured
+ground) are painted once into a cached image, the HUD's fixed parts (panel, button bodies, meter
+track) are added on top, and that image is copied each frame. Only moving things (ball, line, water
+surface, wind streaks, flags, moving parts, the ink level) are drawn per frame. If frames stay slow
+(median over 22 ms), the game steps its resolution down from 2× towards 1× pixel density.
+`npm run perf` measures this: with the CPU slowed 6× at 390×844 and 2× density, the busiest levels
+run at about 30–45 fps (13 fps before the caching). Runs are noisy, so compare a change against
+`main` on the same machine.
 
 **Unlocks.** A level is open while at most 2 levels before it are unsolved, so a player can skip two
 hard levels and keep going.
@@ -194,10 +203,10 @@ CrazyGames build fills it with its own SDK, and the preview and dev builds leave
 | Don't lose progress | If the save can't be read after 3 tries, the session plays on but never writes, so it can't overwrite the real save |
 | Score | `sendScore` with total stars, sent whenever the total goes up |
 | Health | Uncaught errors call `health.logError`, and SDK call failures call `logWarning` |
-| No outside requests | Everything is bundled (system fonts, synthesised audio). `npm run smoke` fails on any request outside the game |
+| No outside requests | Everything is bundled (the font is inlined in the script, sound and music are synthesised). `npm run smoke` fails on any request outside the game |
 | Responsive, touch and mouse | Pointer events, resizing keeps state, and it works in portrait and landscape |
 | No external links, sharing, ads or IAP | None |
-| Bundle size | About 324 KB (80 KB gzipped), of which the 120 Daily Holes are about 50 KB. The limit is 30 MiB for the initial bundle |
+| Bundle size | About 390 KB (121 KB gzipped), of which the 120 Daily Holes are about 50 KB and the inlined font about 44 KB. The limit is 30 MiB for the initial bundle |
 
 The code can't do these steps for you:
 
@@ -223,7 +232,7 @@ artifact from any CI run on `main`.
 | --- | --- |
 | SDK initialised before use | `SDK.init()` runs first, and nothing else is called until it resolves |
 | Loading events | `loadingStart` after init, then `loadingStop` once the save is loaded and the game is playable |
-| Gameplay events | `gameplayStart` while a level is being played. `gameplayStop` on the title, level select, pause menu and win card. Only changes are reported |
+| Gameplay events | `gameplayStart` while a level is being played (a first session is in level 1 right after `loadingStop`). `gameplayStop` on the title, level select, looks, pause menu, win card and world card. Only changes are reported |
 | Progress save | Through the **Data Module** (`SDK.data`), synced to the player's CrazyGames account. Same save format and versioning as YouTube |
 | Mute through the SDK | Follows `SDK.game.settings.muteAudio`, including live changes. No AudioContext is created while muted |
 | Celebrations | `happytime()` on every 3-star win |

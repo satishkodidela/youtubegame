@@ -24,7 +24,9 @@ Draw one line and let physics do the rest. Draw to Hole is a golf puzzle played 
 - Workshop: moving platforms, lifts and spinning bars
 - Gusts: wind, updrafts and levels with two balls at once
 
-Every level can be solved, and the cleverest short line earns 3 stars. Missed? Retry instantly, and your last line stays as a faint guide so you can adjust it. Stuck? After a few tries, a hint shows a line that works.
+Every level can be solved, and the cleverest short line earns 3 stars. Missed? Retry instantly, and your last line stays as a faint guide so you can adjust it. Stuck? After a couple of tries, a hint shows a line that works, and a few more let you skip ahead.
+
+Come back every day for the Daily Hole: a new level for everyone, with a streak to keep alive. Stars and streaks unlock new balls and ink colours.
 
 ## Controls
 
@@ -54,5 +56,6 @@ Marketing creatives URL: optional, leave empty.
 | Portrait video | `promo-out/video-portrait-1080x1620.mp4` (2:3, the same shape as the portrait cover) |
 
 The videos show five levels from different worlds: the 1-1 ramp, a bridge over the pond (3-1), a
-spring launch (2-12), twin windmills (4-11) and two balls in the wind (5-10). Each one is drawn,
-released and finished with 3 stars.
+spring launch (2-12), twin windmills (4-12) and two balls in the wind (5-8). Each one is drawn,
+released and finished with 3 stars. They're picked by level id in `src/editor/promo.ts`, so
+reordering levels doesn't change them.

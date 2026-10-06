@@ -1,4 +1,4 @@
-// Text-free UI: every control is an icon, so the game needs no translation.
+// Button icons. Every control has one; labels, where there are any, come from game/strings.ts.
 
 export type IconName =
   | 'play'

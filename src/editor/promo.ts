@@ -4,7 +4,9 @@ import { WORLDS } from '../levels';
 import { BALL_R, type LevelDef, type Pt } from '../levels/types';
 import { drawStar } from '../render/icons';
 import { drawBackground, drawBall, drawFinger, drawScene, stepParticles, type Particle, type View } from '../render/scene';
-import { FONT, INK, STAR_ON, THEMES, UI_DARK } from '../render/theme';
+import { loadFonts } from '../render/fonts';
+import { drawLogo } from '../render/logo';
+import { STAR_ON, THEMES } from '../render/theme';
 import { DT, Sim } from '../sim/sim';
 import { traceStroke } from '../sim/stroke';
 
@@ -23,7 +25,7 @@ const VIDEO_SIZES: Record<Layout, [number, number]> = {
 };
 
 // Preview video clips, in order. Each: draw the level's hint, release, roll in, celebrate.
-const CLIPS = ['1-1', '3-1', '2-12', '4-11', '5-10'];
+const CLIPS = ['m01', 'w01', 's12', 'k11', 'g10'];
 const FPS = 30;
 const PLAY_SPEED = 1.15;
 const CELEBRATE = 0.55;
@@ -31,9 +33,13 @@ const CELEBRATE = 0.55;
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 
-function find(code: string): { level: LevelDef; world: number } {
-  const [w, l] = code.split('-').map(Number);
-  return { level: WORLDS[w - 1].levels[l - 1], world: w - 1 };
+/** A level and its world index, by level id (ids are stable; positions change when levels are reordered). */
+function find(id: string): { level: LevelDef; world: number } {
+  for (const [world, w] of WORLDS.entries()) {
+    const level = w.levels.find((l) => l.id === id);
+    if (level) return { level, world };
+  }
+  throw new Error(`no level ${id}`);
 }
 
 function setSize(size: [number, number]): [number, number] {
@@ -56,34 +62,6 @@ function frame(layout: Layout, w: number, h: number): { view: View; logo: { x: n
   // Square: zoom into the lower part of the playfield, where the action is.
   const s = (w * 1.0) / 10;
   return { view: { s, ox: 0, oy: h - 13.6 * s }, logo: { x: w / 2, y: h * 0.13, size: w * 0.11 } };
-}
-
-function drawLogo(x: number, y: number, size: number): void {
-  const outlined = (text: string, ty: number, fill: string) => {
-    ctx.font = `900 ${Math.round(size)}px ${FONT}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = size * 0.2;
-    ctx.strokeStyle = UI_DARK;
-    ctx.strokeText(text, 0, ty);
-    ctx.fillStyle = fill;
-    ctx.fillText(text, 0, ty);
-  };
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(-0.04);
-  outlined('DRAW', -size * 0.55, '#ffffff');
-  outlined('TO HOLE', size * 0.52, '#ffc531');
-  ctx.restore();
-  const uw = size * 2.7;
-  ctx.strokeStyle = INK;
-  ctx.lineCap = 'round';
-  ctx.lineWidth = Math.max(6, size * 0.12);
-  ctx.beginPath();
-  ctx.moveTo(x - uw / 2, y + size * 1.2);
-  ctx.quadraticCurveTo(x, y + size * 1.5, x + uw / 2, y + size * 1.1);
-  ctx.stroke();
 }
 
 function partial(line: Pt[], k: number): Pt[] {
@@ -120,7 +98,7 @@ function confetti(ps: Particle[], x: number, y: number, seed: number): void {
 // ---------------------------------------------------------------- covers
 
 interface Cover {
-  /** "world-level", 1-based. */
+  /** Level id. */
   level: string;
   /** Seconds after release to freeze the ball. */
   at: number;
@@ -132,9 +110,9 @@ interface Cover {
 }
 
 const COVERS: Record<Layout, Cover> = {
-  landscape: { level: '3-12', at: 2.15, window: [0, 0, 10, 14], region: [0.5, 0.03, 0.98, 0.97], logo: [0.27, 0.45, 0.083] },
-  portrait: { level: '5-10', at: 1.9, window: [0, 0, 10, 14], region: [0.03, 0.235, 0.97, 0.99], logo: [0.5, 0.1, 0.115] },
-  square: { level: '3-12', at: 2.15, window: [0, 2.6, 10, 12.6], region: [0, 0, 1, 1], logo: [0.7, 0.14, 0.082] },
+  landscape: { level: 'w12', at: 2.15, window: [0, 0, 10, 14], region: [0.5, 0.03, 0.98, 0.97], logo: [0.27, 0.45, 0.083] },
+  portrait: { level: 'g10', at: 1.9, window: [0, 0, 10, 14], region: [0.03, 0.235, 0.97, 0.99], logo: [0.5, 0.1, 0.115] },
+  square: { level: 'w12', at: 2.15, window: [0, 2.6, 10, 12.6], region: [0, 0, 1, 1], logo: [0.7, 0.14, 0.082] },
 };
 
 function fitWindow(c: Cover, w: number, h: number): View {
@@ -202,7 +180,7 @@ function renderCover(layout: Layout): string {
   sim.ballViews().forEach((b, i) => {
     if (!b.sunk) drawBall(ctx, view.ox + b.x * view.s, view.oy + b.y * view.s, BALL_R * view.s, b.angle, i);
   });
-  drawLogo(cover.logo[0] * w, cover.logo[1] * h, cover.logo[2] * w);
+  drawLogo(ctx, cover.logo[0] * w, cover.logo[1] * h, cover.logo[2] * w);
   return canvas.toDataURL('image/png');
 }
 
@@ -306,9 +284,10 @@ function renderFrame(i: number): string {
       drawStar(ctx, view.ox + (5 + (k - 1) * 1.6) * view.s, view.oy + (k === 1 ? 1.5 : 1.8) * view.s, r, STAR_ON, '#c98f00');
     }
   }
-  drawLogo(logo.x, logo.y, logo.size * (video.layout === 'landscape' ? 1 : 0.9));
+  drawLogo(ctx, logo.x, logo.y, logo.size * (video.layout === 'landscape' ? 1 : 0.9));
   return canvas.toDataURL('image/jpeg', 0.92);
 }
 
 Object.assign(window, { promo: { renderCover, setupVideo, renderFrame, FPS } });
-document.title = 'ready';
+// The store art uses the game's font; wait for it before saying the page is ready.
+void loadFonts(5000).then(() => (document.title = 'ready'));
